@@ -255,5 +255,22 @@ class Templates(unittest.TestCase):
             if not path.exists(): path=ROOT/'migration/turbo-backup/config/Klipper-Configs/macros'/name
             self.assertIn('UPDATE_DELAYED_GCODE ID=ENABLE_MOTION_SENSOR DURATION=60',path.read_text(encoding='utf-8'))
 
+    def test_core_material_with_and_without_cooldown(self):
+        staged=ROOT/'migration/core-staged/macros/material.cfg'
+        if not staged.exists(): self.skipTest('Core patch is outside standalone repository')
+        for installed in [True,False]:
+            with self.subTest(cooldown_installed=installed):
+                p=Printer(cooldown=installed)
+                p.load(staged)
+                p.state['gcode_macro global_vars']=wrap({'extruder_type':'dd'})
+                p.state['configfile'].settings.extruder=wrap({'nozzle_diameter':.4})
+                p.state['configfile'].config=wrap({'heater_bed':{'control':'pid'},'extruder':{'control':'pid'}})
+                p.state['gcode_move']=wrap({'homing_origin':{'z':0}})
+                p.run('_MATERIAL_MODS',MATERIAL='ASA')
+                if installed:
+                    self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].cooldown_profile,'HOLD_60M_COOL_EX')
+                else:
+                    self.assertFalse(any(c.startswith('COOLDOWN_SELECT ') for c in p.commands))
+
 if __name__=='__main__':
     unittest.main()
