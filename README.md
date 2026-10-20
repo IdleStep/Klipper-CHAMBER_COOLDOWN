@@ -1,82 +1,87 @@
-# 🔧 Klipper CHAMBER_COOLDOWN Macros
+# Klipper CHAMBER_COOLDOWN
 
-This set of Klipper macros enables a controlled **chamber cooldown sequence** at the end of a print. It monitors temperature sensors and manages exhaust fans to help streamline cooling your chamber.
+Material-selected five-phase cooldown: **hold → ramp → passive rest → exhaust →
+final cooling**. This repository owns the engine, six profiles and material map.
+It has no dependency on Klipper-Configs.
 
-⚠️ Note: These macros are designed as a reference implementation. They are not standalone and must be integrated into your existing printer configuration to function properly.
----
+## Installation
 
-## 🪟 Overview
+Requires [Klipper-Hardware-Controls](https://github.com/IdleStep/Klipper-Hardware-Controls)
+API 1 (settings, fan and chamber modules), standard Klipper macros and `[respond]`.
+Printer hardware definitions stay in your own configuration. Turbo's Kalico is
+the initial deployment target. Read the [known issues](docs/KNOWN_ISSUES.md).
 
-When a print ends or is canceled, the `CHAMBER_COOLDOWN` macro is triggered. It:
-- Checks temperatures of the **chamber** and **bed**.
-- Controls the **exhaust fan** speed.
-- Loops until safe cooldown targets are reached or a time limit is hit.
-
-You can configure target chamber temps, exhaust speeds, and custom delays.
-
----
-
-## 🔧 Parameters (Used in `print_start`)
-
-| Parameter      | Description                                                                 |
-|----------------|-----------------------------------------------------------------------------|
-| `CHAMBER`      | Target temperature (°C) for chamber preheat. <br> `0`: Off + full exhaust. <br> `1–10`: Passive cool only, no exhaust. <br> `11+`: Actively heat chamber. |
-| `EXHAUST_END`  | Final exhaust fan speed during cooldown. Value between `0.0` and `1.0` (0–100%). |
-
-> ⚠️ The `print_start` and `print_end` entries below are **only the relevant lines** you need to insert into your existing macros. Do not replace your full `print_start` or `print_end` definitions — instead, **merge these lines** into the appropriate place in your configuration.
-
----
-
-## 🌐 Global Configuration
-
-In your `printer.cfg`, define or update the following in a macro named `global_vars`:
+Clone both repositories under `~/printer_data/config`, then include:
 
 ```ini
-[gcode_macro global_vars]
-variable_max_chamber_cooldown_run_count: 1442     # Max loops (each = 5s, 1442 ≈ 2 hours)
-variable_exhaust_off_chamber: 35                  # Chamber temp (°C) target to stop fan
-variable_exhaust_off_bed: 40                      # Bed temp (°C) target to stop fan
-variable_exhaust_delay: 120                       # Delay (s) before cooldown starts
-gcode:
+[include Klipper-Hardware-Controls/settings.cfg]
+[include Klipper-Hardware-Controls/fans.cfg]
+[include Klipper-Hardware-Controls/chamber.cfg]
+[include hardware-local.cfg]
+[include Klipper-CHAMBER_COOLDOWN/cooldown.cfg]
+[include cooldown-local.cfg]
 ```
 
----
+For the full control bundle, use Hardware Controls' `hardware.cfg` instead of the
+three individual files. Include each module once. Copy local examples outside
+checkouts; load overrides after defaults. Cooldown uses mapped device names in
+`_HARDWARE_VARS`. For sensor-only chambers, set `chamber_heater` to `""` and
+`chamber_sensor` to the full temperature-sensor object name.
 
-## ✅ Usage Steps
-
-1. In your `print_start` macro:
-   - Set the `CHAMBER` parameter to your desired target.
-   - Set the `EXHAUST_END` parameter to control the exhaust fan during cooldown.
-
-2. At the end of a print (`print_end` or `print_cancel`), the `CHAMBER_COOLDOWN` macro will:
-   - Wait for `exhaust_delay` seconds.
-   - Start looping every **5 seconds** to check:
-     - Current bed and chamber temps.
-     - Exhaust fan speed consistency.
-   - Report chamber and bed temps **every 30 seconds** via `M118`.
-   - Exit when **any** of the following conditions are met:
-     - Chamber temp is below `exhaust_off_chamber`, **AND**
-     - Bed temp is below `exhaust_off_bed`, **OR**
-     - Exhaust fan speed has changed from the initially configured value, **OR**
-     - Max loop count (`max_chamber_cooldown_run_count`) is reached.
-
----
-
-## 🛑 Canceling the Cooldown Manually
-
-You can stop the cooldown sequence manually by running:
+## Public commands
 
 ```gcode
-CHAMBER_RESET
+COOLDOWN_SELECT MATERIAL=ASA
+START_COOLDOWN
+COOLDOWN_STATUS
+COOLDOWN_RESET
+# Explicit override:
+START_COOLDOWN PROFILE=HOLD_60M_COOL_EX
 ```
 
-Alternatively, modifying the exhaust fan speed will also interrupt the loop.
+Unknown material selects PASSIVE_ONLY. An unknown explicit profile reports an
+error without scheduling a new run. Reset clears selection and stops the timer;
+it does not shut down heaters or fans. Select material after resetting for a new
+job. Runtime state is not persisted across restarts.
 
----
+## Profiles
 
-## ⚠️ Requirements
+| Profile | Hold | Ramp target | Rest | Exhaust |
+|---|---:|---:|---:|---:|
+| HOLD_120M_COOL_NO_EX | 120 min | 42°C | 0 | 0% |
+| HOLD_60M_COOL_EX | 60 min | 42°C | 0 | 100% |
+| HOLD_30M_COOL_EX | 30 min | 42°C | 0 | 100% |
+| PASSIVE_ONLY | 0 | skipped | 0 | 0% |
+| REST_5M_THEN_EX | 0 | skipped | 5 min | 100% |
+| IMMEDIATE_EX | 0 | skipped | 0 | 100% |
 
-- Your **exhaust fan** must be named exactly: `exhaust_fan`.
-- Your **chamber temperature** must be available through **either**:
-  - A `temperature_sensor` named `Chamber`, **OR**
-  - A `heater` (e.g. `heater_generic`) named `Chamber`.
+Hold/ramp profiles reduce target 1°C every 120 seconds. The loop runs every five
+seconds. Completion requires chamber and bed readings at or below 35°C by default
+and resets all fans configured through Hardware Controls. The material map keeps
+Turbo's effective behavior, including HIPS/PCTG falling back to PASSIVE_ONLY.
+
+## Integration and updates
+
+Merge guarded calls into existing macros: COOLDOWN_RESET during startup before
+material selection; COOLDOWN_SELECT MATERIAL={material} during material handling;
+START_COOLDOWN after normal print end/cancel actions; COOLDOWN_RESET in idle/UI
+shutdown. Do not replace whole print macros or write runtime variables directly.
+
+```jinja
+{% if 'gcode_macro START_COOLDOWN' in printer %}
+  START_COOLDOWN
+{% endif %}
+```
+
+See [migration and rollback](docs/MIGRATION.md) and
+[Moonraker updater example](examples/moonraker.conf). Keep overrides outside
+checkouts and update while inactive. Initial compatibility: cooldown API 1 with
+Hardware Controls API 1; record exact tested revisions per printer.
+
+## Tests
+
+Clone Hardware Controls into `hardware-controls` beside this README for testing,
+install `requirements-test.txt`, then run `python -m unittest discover -s tests -v`.
+Tests render templates and simulate commands without contacting hardware. They
+cover all profiles, mapped devices, optional fans, fallback, reset and completion;
+they do not replace full firmware or thermal validation.
