@@ -234,6 +234,16 @@ class Templates(unittest.TestCase):
                 self.assertNotIn('_COOLDOWN_LOOP', p.delays)
                 self.assertTrue(any('Invalid cooldown profile CUSTOM' in c for c in p.commands))
 
+    def test_invalid_profile_lists_every_problem_in_one_line(self):
+        # Klipper cuts a gcode line at ';', so the message must not contain one.
+        p = Printer()
+        self.custom_profile(p, chamber_hold_minutes=-1, exhaust_fan_speed=1.5)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        message = [c for c in p.commands if 'Invalid cooldown profile CUSTOM' in c][0]
+        self.assertNotIn(';', message)
+        self.assertIn('0 or more, exhaust_fan_speed must be', message)
+        self.assertTrue(message.endswith('Cooldown not started."'))
+
     def test_ramp_step_does_not_overshoot(self):
         p = Printer()
         p.state['heater_generic chamber'].target = 44.

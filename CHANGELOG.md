@@ -17,6 +17,9 @@ Requires Hardware Controls 1.0.0 or later.
 - Idle timeout is raised for long hold/ramp phases and restored afterwards.
 - Passive rest turns the exhaust off; `exhaust_enable` is honored.
 - Invalid profiles are refused at start; ramp steps never overshoot.
+- A profile with several problems lists them all in one `Invalid cooldown
+  profile` line. They were joined with `;`, which Klipper and Kalico treat as
+  the start of a comment, so the message was cut off.
 - Chamber progress arrow works, and the bed arrow compares with the displayed
   bed value (target or `chamber_cooled_temp`), as the chamber arrow does.
 
