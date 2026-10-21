@@ -242,6 +242,19 @@ class Templates(unittest.TestCase):
         targets = [t for phase, _, t in self.run_until(p, 3) if phase == 2]
         self.assertEqual(sorted(set(targets)), [42., 44.])
 
+    def test_unused_phases_are_shown_as_skipped(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.run_until(p, 5)
+        banners = [c for c in p.commands if 'Cooldown phase' in c]
+        self.assertEqual([b.split('MSG="Cooldown phase ')[1][:3] for b in banners],
+                         ['1/5', '2/5', '3/5', '4/5', '5/5'])
+        self.assertIn('HOLD: skipped, profile has no hold', banners[0])
+        self.assertIn('RAMP: skipped, profile has no ramp', banners[1])
+        self.assertIn('rest skipped, profile has no rest', banners[2])
+        for line in ['Hold complete', 'Rest complete', 'skipping ramp', '0.0°C every 0 s']:
+            self.assertFalse(any(line in c for c in p.commands), line)
+
     def test_chamber_arrow_reported(self):
         p = Printer()
         p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')

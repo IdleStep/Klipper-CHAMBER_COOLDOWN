@@ -22,6 +22,9 @@ Requires Hardware Controls 1.0.0 or later.
 
 ### Changed
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.
+- A phase the profile does not use still prints its numbered banner, marked
+  skipped (`Cooldown phase 2/5 RAMP: skipped, profile has no ramp`), instead of
+  zero durations followed by `Hold complete` or `skipping ramp`.
 - Internal names: `_CHAMBER_SET_TARGET` is now `_COOLDOWN_SNAPSHOT`, and its
   recorded values are `seen_*` variables in `_COOLDOWN_VARS`.
 - The profile table is `_COOLDOWN_PROFILES.profiles` (was `filament_table`). A
