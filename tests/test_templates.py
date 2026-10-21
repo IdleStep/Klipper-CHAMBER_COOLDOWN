@@ -36,7 +36,8 @@ class Printer:
             'fan_generic exhaust_fan': {'speed':0.}, 'fan_generic external_pc': {'speed':0.},
             'filament_motion_sensor motion_sensor': {'enabled':False},
             'filament_switch_sensor switch_sensor': {'enabled':False},
-            'configfile': {'settings': {'fan': {'off_below':0.01}, 'stepper_x':{}, 'stepper_y':{}}}})
+            'configfile': {'settings': {'fan': {'off_below':0.01}, 'stepper_x':{}, 'stepper_y':{}, 'idle_timeout': {'timeout':4800.}}}})
+        self.idle_timeout=4800.
         self.templates={}
         self.commands=[]
         self.delays={}
@@ -76,6 +77,8 @@ class Printer:
                 self.run(name,**args)
             elif name=='SET_GCODE_VARIABLE':
                 self.state['gcode_macro '+args['MACRO']][args['VARIABLE']]=wrap(ast.literal_eval(args['VALUE']))
+            elif name=='SET_IDLE_TIMEOUT':
+                self.idle_timeout=float(args['TIMEOUT'])
             elif name=='UPDATE_DELAYED_GCODE':
                 self.delays[args['ID']]=float(args['DURATION'])
             elif name=='SET_HEATER_TEMPERATURE':
@@ -197,25 +200,6 @@ class Templates(unittest.TestCase):
                 self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].phase,0)
                 self.assertEqual(p.delays['_COOLDOWN_LOOP'],0)
 
-    def test_phase_trace_matches_live_baseline(self):
-        baseline=ROOT/'migration/turbo-backup/config/Klipper-Configs/macros/cooldown.cfg'
-        if not baseline.exists(): self.skipTest('Live baseline is kept outside the published repository')
-        for profile in Printer().state['gcode_macro _COOLDOWN_PROFILES'].filament_table:
-            with self.subTest(profile=profile):
-                old=Printer(cooldown=False)
-                old.load(baseline)
-                new=Printer()
-                for p in [old,new]:
-                    p.state['gcode_macro _COOLDOWN_VARS'].cooldown_profile=profile
-                    p.run('START_COOLDOWN')
-                for tick in range(2400):
-                    for p in [old,new]: p.run('_COOLDOWN_LOOP')
-                    for key in ['phase','phase_loops','chamber_target','bed_target','exhaust_speed_target']:
-                        self.assertEqual(old.state['gcode_macro _COOLDOWN_VARS'][key],new.state['gcode_macro _COOLDOWN_VARS'][key],(profile,tick,key))
-                    self.assertEqual(old.state['heater_generic chamber'].target,new.state['heater_generic chamber'].target)
-                    self.assertEqual(old.state['fan_generic exhaust_fan'].speed,new.state['fan_generic exhaust_fan'].speed)
-                    if new.state['gcode_macro _COOLDOWN_VARS'].phase==5: break
-
     def test_override_missing_bed_fans(self):
         p=Printer()
         p.run('START_COOLDOWN',PROFILE='HOLD_60M_COOL_EX')
@@ -244,33 +228,152 @@ class Templates(unittest.TestCase):
         for i in range(12): p.run('_COOLDOWN_LOOP')
         self.assertEqual(p.state['fan_generic vent'].speed,1)
 
-    def test_core_sensor_scheduling(self):
-        staged=ROOT/'migration/core-staged'
-        if not staged.exists(): self.skipTest('Core patch is outside standalone repository')
-        common=(staged/'macros/common.cfg').read_text(encoding='utf-8')
-        self.assertEqual(common.count('[delayed_gcode disable_sensors]'),1)
-        self.assertIn('initial_duration: 0.1\ngcode:\n  MOTION_SENSOR ENABLE=0',common)
-        for name in ['print_start.cfg','belt_print_start.cfg']:
-            path=staged/'macros'/name
-            if not path.exists(): path=ROOT/'migration/turbo-backup/config/Klipper-Configs/macros'/name
-            self.assertIn('UPDATE_DELAYED_GCODE ID=ENABLE_MOTION_SENSOR DURATION=60',path.read_text(encoding='utf-8'))
+    def run_until(self,p,phase,limit=2400):
+        trace=[]
+        for i in range(limit):
+            p.run('_COOLDOWN_LOOP')
+            cv=p.state['gcode_macro _COOLDOWN_VARS']
+            trace.append((cv.phase,cv.phase_loops,p.state['heater_generic chamber'].target))
+            if cv.phase in (0,phase): break
+        return trace
 
-    def test_core_material_with_and_without_cooldown(self):
-        staged=ROOT/'migration/core-staged/macros/material.cfg'
-        if not staged.exists(): self.skipTest('Core patch is outside standalone repository')
-        for installed in [True,False]:
-            with self.subTest(cooldown_installed=installed):
-                p=Printer(cooldown=installed)
-                p.load(staged)
-                p.state['gcode_macro global_vars']=wrap({'extruder_type':'dd'})
-                p.state['configfile'].settings.extruder=wrap({'nozzle_diameter':.4})
-                p.state['configfile'].config=wrap({'heater_bed':{'control':'pid'},'extruder':{'control':'pid'}})
-                p.state['gcode_move']=wrap({'homing_origin':{'z':0}})
-                p.run('_MATERIAL_MODS',MATERIAL='ASA')
-                if installed:
-                    self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].cooldown_profile,'HOLD_60M_COOL_EX')
-                else:
-                    self.assertFalse(any(c.startswith('COOLDOWN_SELECT ') for c in p.commands))
+    def custom_profile(self,p,**changes):
+        table=p.state['gcode_macro _COOLDOWN_PROFILES'].filament_table
+        table['CUSTOM']=wrap(dict(table['HOLD_60M_COOL_EX'],**changes))
+
+    def test_heater_released_for_every_profile_and_start_target(self):
+        for start in [55.,30.,0.]:
+            for profile in Printer().state['gcode_macro _COOLDOWN_PROFILES'].filament_table:
+                with self.subTest(profile=profile,start=start):
+                    p=Printer()
+                    p.state['heater_generic chamber'].target=start
+                    p.run('START_COOLDOWN',PROFILE=profile)
+                    trace=self.run_until(p,5)
+                    self.assertEqual(trace[-1][0],5)
+                    self.assertTrue(all(target==0 for phase,_,target in trace if phase>=3))
+
+    def test_one_transition_per_tick(self):
+        profiles=Printer().state['gcode_macro _COOLDOWN_PROFILES'].filament_table
+        for profile,start in [(profile,start) for profile in profiles for start in [55.,30.]]:
+            with self.subTest(profile=profile,start=start):
+                p=Printer()
+                p.state['heater_generic chamber'].target=start
+                p.run('START_COOLDOWN',PROFILE=profile)
+                previous=(1,0)
+                for phase,loops,_ in self.run_until(p,5):
+                    if phase==previous[0]:
+                        self.assertEqual(loops,previous[1]+1)
+                    else:
+                        self.assertGreater(phase,previous[0])
+                        self.assertEqual(loops,0)
+                    previous=(phase,loops)
+
+    def test_completion_turns_heater_and_fans_off(self):
+        p=Printer()
+        p.state['heater_generic chamber'].update(target=30.,temperature=30.)
+        p.state['heater_bed'].temperature=30.
+        p.run('START_COOLDOWN',PROFILE='HOLD_60M_COOL_EX')
+        p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].phase,0)
+        self.assertEqual(p.state['heater_generic chamber'].target,0)
+        self.assertIn('RESET_FANS',p.commands)
+
+    def test_idle_timeout_extended_for_heated_phases_only(self):
+        for profile,expected in [('HOLD_120M_COOL_NO_EX',7200+13*120+600),('HOLD_60M_COOL_EX',3600+13*120+600)]:
+            with self.subTest(profile=profile):
+                p=Printer()
+                p.run('START_COOLDOWN',PROFILE=profile)
+                self.assertEqual(p.idle_timeout,expected)
+                self.run_until(p,3)
+                self.assertEqual(p.idle_timeout,4800)
+                self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].idle_timeout_extended,0)
+
+    def test_idle_timeout_untouched_when_not_needed(self):
+        for start,profile in [(55.,'IMMEDIATE_EX'),(55.,'REST_5M_THEN_EX'),(30.,'HOLD_120M_COOL_NO_EX')]:
+            with self.subTest(profile=profile,start=start):
+                p=Printer()
+                p.state['heater_generic chamber'].target=start
+                p.run('START_COOLDOWN',PROFILE=profile)
+                self.run_until(p,5)
+                p.run('COOLDOWN_RESET')
+                self.assertFalse(any(c.startswith('SET_IDLE_TIMEOUT') for c in p.commands))
+
+    def test_reset_restores_extended_idle_timeout_once(self):
+        p=Printer()
+        p.run('START_COOLDOWN',PROFILE='HOLD_120M_COOL_NO_EX')
+        p.run('COOLDOWN_RESET')
+        self.assertEqual(p.idle_timeout,4800)
+        p.idle_timeout=43200.
+        p.run('COOLDOWN_RESET')
+        self.assertEqual(p.idle_timeout,43200)
+
+    def test_reset_leaves_heaters_and_fans(self):
+        p=Printer()
+        p.state['fan_generic exhaust_fan'].speed=.5
+        p.run('START_COOLDOWN',PROFILE='HOLD_60M_COOL_EX')
+        p.run('COOLDOWN_RESET')
+        self.assertEqual(p.state['heater_generic chamber'].target,55)
+        self.assertEqual(p.state['fan_generic exhaust_fan'].speed,.5)
+        self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].cooldown_ramp_step_seconds,0)
+
+    def test_passive_rest_turns_exhaust_off(self):
+        p=Printer()
+        p.state['fan_generic exhaust_fan'].speed=1.
+        p.run('START_COOLDOWN',PROFILE='REST_5M_THEN_EX')
+        self.run_until(p,3)
+        p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].phase,3)
+        self.assertEqual(p.state['fan_generic exhaust_fan'].speed,0)
+        self.run_until(p,5)
+        self.assertEqual(p.state['fan_generic exhaust_fan'].speed,1)
+
+    def test_exhaust_enable_is_honored(self):
+        p=Printer()
+        self.custom_profile(p,chamber_hold_minutes=0,chamber_target_temp=0,exhaust_enable=False,exhaust_fan_speed=1.0)
+        p.run('START_COOLDOWN',PROFILE='CUSTOM')
+        self.assertEqual(self.run_until(p,5)[-1][0],5)
+        self.assertEqual(p.state['fan_generic exhaust_fan'].speed,0)
+
+    def test_invalid_profiles_are_refused(self):
+        for changes in [dict(cooldown_ramp_step_seconds=2),dict(cooldown_ramp_step_c=0),dict(exhaust_fan_speed=1.5),dict(chamber_hold_minutes=-1)]:
+            with self.subTest(**changes):
+                p=Printer()
+                self.custom_profile(p,**changes)
+                p.run('START_COOLDOWN',PROFILE='CUSTOM')
+                self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].phase,0)
+                self.assertNotIn('_COOLDOWN_LOOP',p.delays)
+                self.assertTrue(any('Invalid cooldown profile CUSTOM' in c for c in p.commands))
+
+    def test_ramp_step_does_not_overshoot(self):
+        p=Printer()
+        p.state['heater_generic chamber'].target=44.
+        self.custom_profile(p,chamber_hold_minutes=0,cooldown_ramp_step_c=5)
+        p.run('START_COOLDOWN',PROFILE='CUSTOM')
+        targets=[t for phase,_,t in self.run_until(p,3) if phase==2]
+        self.assertEqual(sorted(set(targets)),[42.,44.])
+
+    def test_chamber_arrow_reported(self):
+        p=Printer()
+        p.run('START_COOLDOWN',PROFILE='HOLD_60M_COOL_EX')
+        p.run('_COOLDOWN_LOOP')
+        report=[c for c in p.commands if c.startswith('RESPOND PREFIX="📃"')]
+        self.assertTrue(report)
+        self.assertIn('Chamber →',report[0])
+
+    def test_unknown_material_uses_table_default(self):
+        p=Printer()
+        p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['DEFAULT']='IMMEDIATE_EX'
+        p.run('COOLDOWN_SELECT',MATERIAL='UNOBTAINIUM')
+        self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].cooldown_profile,'IMMEDIATE_EX')
+
+    def test_public_macros_have_descriptions(self):
+        for name in ['materials','engine']:
+            cfg=configparser.RawConfigParser(delimiters=(':',),strict=True)
+            cfg.read(ROOT/(name+'.cfg'),encoding='utf-8')
+            for section in cfg.sections():
+                if section.startswith('gcode_macro ') and not section[12:].startswith('_'):
+                    with self.subTest(macro=section):
+                        self.assertTrue(cfg[section].get('description','').strip())
 
 if __name__=='__main__':
     unittest.main()

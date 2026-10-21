@@ -16,6 +16,10 @@ Startup disable_sensors stays in the core common macro file. The scheduled
 ENABLE_MOTION_SENSOR callback lives in Hardware Controls and calls MOTION_SENSOR
 ENABLE=1; existing 60-second scheduling is unchanged.
 
+The engine no longer matches that baseline tick for tick: the defects listed in
+[known issues](KNOWN_ISSUES.md) were fixed after the migration. Public commands,
+profile names and the material map are unchanged.
+
 Verify loading and smoke checks, then observe a full ASA cooldown at production
 timings before publishing the core cleanup. Other printers must install Hardware
 Controls before adopting that cleanup; cooldown is optional and calls are guarded.

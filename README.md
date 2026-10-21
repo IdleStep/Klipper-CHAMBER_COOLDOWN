@@ -39,10 +39,11 @@ COOLDOWN_RESET
 START_COOLDOWN PROFILE=HOLD_60M_COOL_EX
 ```
 
-Unknown material selects PASSIVE_ONLY. An unknown explicit profile reports an
-error without scheduling a new run. Reset clears selection and stops the timer;
-it does not shut down heaters or fans. Select material after resetting for a new
-job. Runtime state is not persisted across restarts.
+Unknown material selects the material table's DEFAULT (PASSIVE_ONLY). An unknown
+or invalid explicit profile reports an error without scheduling a new run. Reset
+clears selection, stops the timer and restores an idle timeout the cooldown
+extended; it does not shut down heaters or fans. Select material after resetting
+for a new job. Runtime state is not persisted across restarts.
 
 ## Profiles
 
@@ -55,10 +56,16 @@ job. Runtime state is not persisted across restarts.
 | REST_5M_THEN_EX | 0 | skipped | 5 min | 100% |
 | IMMEDIATE_EX | 0 | skipped | 0 | 100% |
 
-Hold/ramp profiles reduce target 1°C every 120 seconds. The loop runs every five
-seconds. Completion requires chamber and bed readings at or below 35°C by default
-and resets all fans configured through Hardware Controls. The material map keeps
-Turbo's effective behavior, including HIPS/PCTG falling back to PASSIVE_ONLY.
+Hold/ramp profiles reduce target 1°C every 120 seconds, never below the ramp
+target. The loop runs every five seconds. The chamber heater is switched off on
+entering phase 3, whichever phases were skipped, and exhaust is switched off for a
+passive rest. When hold, ramp and rest would outlast `[idle_timeout]`, the timeout
+is raised for those phases and restored when the heater is released. Completion
+requires chamber and bed readings at or below 35°C by default, then turns off the
+chamber heater and all fans configured through Hardware Controls. Profiles with a
+ramp need a step above 0°C and at least 5 seconds; exhaust speed must be 0.0 to
+1.0. The material map keeps Turbo's effective behavior, including HIPS/PCTG
+falling back to PASSIVE_ONLY.
 
 ## Integration and updates
 
