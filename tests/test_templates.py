@@ -250,6 +250,14 @@ class Templates(unittest.TestCase):
         self.assertTrue(report)
         self.assertIn('Chamber →', report[0])
 
+    def test_bed_arrow_compares_with_displayed_target(self):
+        p = Printer()
+        p.state['heater_bed'].temperature = 34.
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('_COOLDOWN_LOOP')
+        report = [c for c in p.commands if c.startswith('RESPOND PREFIX="📃"')]
+        self.assertIn('Bed → 034.0/035.0', report[0])
+
     def test_status_names_phase(self):
         p = Printer()
         p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')

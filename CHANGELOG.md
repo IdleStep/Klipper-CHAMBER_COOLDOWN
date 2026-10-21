@@ -17,7 +17,8 @@ Requires Hardware Controls 1.0.0 or later.
 - Idle timeout is raised for long hold/ramp phases and restored afterwards.
 - Passive rest turns the exhaust off; `exhaust_enable` is honored.
 - Invalid profiles are refused at start; ramp steps never overshoot.
-- Chamber progress arrow works.
+- Chamber progress arrow works, and the bed arrow compares with the displayed
+  bed value (target or `chamber_cooled_temp`), as the chamber arrow does.
 
 ### Changed
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.
