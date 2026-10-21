@@ -1,16 +1,92 @@
 name: Template regression checks
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Hardware Controls supplies the test harness (tests/klipper_sim.py,
+# config_lint.py, klippy_batch.py). Pinned so a change there cannot break this
+# repository's checks unannounced; bump HARNESS_REF when updating.
+env:
+  HARNESS_REF: 5bc6d7fe6a541e50a8eb1cda8ab3bf71adebeeed
+
 jobs:
   templates:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Hardware Controls configs from the harness revision.
+          - hardware: harness
+            ref: ''
+          # Oldest supported release (API 1.0.0): README promises it still works.
+          - hardware: api-1.0.0
+            ref: 95c9773fd5890f88343055fa20147cef51e1e530
+    name: templates (hardware ${{ matrix.hardware }})
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           repository: IdleStep/Klipper-Hardware-Controls
+          ref: ${{ env.HARNESS_REF }}
           path: hardware-controls
+      - if: matrix.ref != ''
+        uses: actions/checkout@v4
+        with:
+          repository: IdleStep/Klipper-Hardware-Controls
+          ref: ${{ matrix.ref }}
+          path: .hardware-under-test
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: pip install -r requirements-test.txt
       - run: python -m unittest discover -s tests -v
+        env:
+          HARDWARE_CONTROLS_ROOT: ${{ matrix.ref != '' && '.hardware-under-test' || '' }}
+
+  # Load cooldown in real firmware (no hardware) and run tests/klippy/*.gcode.
+  klippy:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - firmware: klipper
+            repository: Klipper3d/klipper
+            ref: a08fc79fcfa342e5b95ac02a9a8b271f453523e9
+          - firmware: kalico
+            repository: KalicoCrew/kalico
+            ref: a6796621ef8abb905935a5b5c194a523a1d45a48
+    name: klippy (${{ matrix.firmware }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: IdleStep/Klipper-Hardware-Controls
+          ref: ${{ env.HARNESS_REF }}
+          path: hardware-controls
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.repository }}
+          ref: ${{ matrix.ref }}
+          path: .firmware
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build linux process MCU dictionary
+        run: |
+          cp .firmware/test/configs/linuxprocess.config .firmware/.config
+          make -C .firmware olddefconfig
+          make -C .firmware -j4
+      - name: Install requirements
+        run: |
+          pip install -r requirements-test.txt
+          python -m venv .klippy-env
+          .klippy-env/bin/pip install -r .firmware/scripts/klippy-requirements.txt
+      - run: python -m unittest discover -s tests -p test_klippy.py -v
+        env:
+          KLIPPER_DIR: .firmware
+          KLIPPY_DICT: .firmware/out/klipper.dict
+          KLIPPY_PYTHON: .klippy-env/bin/python
+          KLIPPY_REQUIRED: '1'
