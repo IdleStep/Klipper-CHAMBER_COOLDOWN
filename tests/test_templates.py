@@ -63,7 +63,7 @@ class Templates(unittest.TestCase):
         self.assertEqual(p.delays['_COOLDOWN_LOOP'], 0)
 
     def test_all_profiles_reach_final_phase(self):
-        for profile in Printer().state['gcode_macro _COOLDOWN_PROFILES'].filament_table:
+        for profile in Printer().state['gcode_macro _COOLDOWN_PROFILES'].profiles:
             with self.subTest(profile=profile):
                 p = Printer()
                 p.run('START_COOLDOWN', PROFILE=profile)
@@ -122,12 +122,12 @@ class Templates(unittest.TestCase):
         return trace
 
     def custom_profile(self, p, **changes):
-        table = p.state['gcode_macro _COOLDOWN_PROFILES'].filament_table
+        table = p.state['gcode_macro _COOLDOWN_PROFILES'].profiles
         table['CUSTOM'] = wrap(dict(table['HOLD_60M_COOL_EX'], **changes))
 
     def test_heater_released_for_every_profile_and_start_target(self):
         for start in [55., 30., 0.]:
-            for profile in Printer().state['gcode_macro _COOLDOWN_PROFILES'].filament_table:
+            for profile in Printer().state['gcode_macro _COOLDOWN_PROFILES'].profiles:
                 with self.subTest(profile=profile, start=start):
                     p = Printer()
                     p.state['heater_generic chamber'].target = start
@@ -137,7 +137,7 @@ class Templates(unittest.TestCase):
                     self.assertTrue(all(target == 0 for phase, _, target in trace if phase >= 3))
 
     def test_one_transition_per_tick(self):
-        profiles = Printer().state['gcode_macro _COOLDOWN_PROFILES'].filament_table
+        profiles = Printer().state['gcode_macro _COOLDOWN_PROFILES'].profiles
         for profile, start in [(profile, start) for profile in profiles for start in [55., 30.]]:
             with self.subTest(profile=profile, start=start):
                 p = Printer()

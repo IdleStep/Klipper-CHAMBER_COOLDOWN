@@ -23,6 +23,8 @@ Requires Hardware Controls 1.0.0 or later.
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.
 - Internal names: `_CHAMBER_SET_TARGET` is now `_COOLDOWN_SNAPSHOT`, and its
   recorded values are `seen_*` variables in `_COOLDOWN_VARS`.
+- The profile table is `_COOLDOWN_PROFILES.profiles` (was `filament_table`). A
+  local file that overrides the profile table must use the new name.
 - COOLDOWN_SELECT falls back to the material table's `DEFAULT`.
 - Moonraker example follows tagged releases.
 - Tests use Hardware Controls' shared harness, lint the configs, run in real
