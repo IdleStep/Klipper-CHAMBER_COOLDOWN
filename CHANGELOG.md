@@ -31,6 +31,7 @@ Requires Hardware Controls 1.0.0 or later.
   local file that overrides the profile table must use the new name.
 - COOLDOWN_SELECT falls back to the material table's `DEFAULT`.
 - Moonraker example follows tagged releases.
+- Code, comments, tests, README and docs tidied, with no behavior change.
 - Tests use Hardware Controls' shared harness, lint the configs, run in real
   Klipper and Kalico, and run against Hardware Controls 1.0.0.
 
