@@ -41,6 +41,16 @@ Requires Hardware Controls 1.0.0 or later.
   missing key work as before). Text such as `"False"` counted as true, so the
   fans ran at full speed; text and `None` are now refused with `exhaust_enable
   must be True or False`.
+- Profile values must be present and numeric. `chamber_hold_minutes`,
+  `passive_rest_minutes`, `chamber_target_temp`, `cooldown_ramp_step_c`,
+  `cooldown_ramp_step_seconds` and `exhaust_fan_speed` used to be coerced
+  silently: text or `None` read as 0 (a skipped phase, or fans set to 0), and a
+  missing key raised a template error. START_COOLDOWN now refuses them in one
+  `Invalid cooldown profile NAME: ... must be numbers` line. Text values such as
+  `"60"`, which were accepted before, are refused too. The shipped profiles use
+  numbers and are unaffected.
+- Fractional hold and rest minutes are honored. They were truncated, so a hold
+  of 0.5 minutes was no hold at all.
 
 ### Changed
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.

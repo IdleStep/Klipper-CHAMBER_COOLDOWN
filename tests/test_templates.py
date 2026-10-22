@@ -392,6 +392,37 @@ class Templates(unittest.TestCase):
                 self.assertEqual(p.state[VARS].phase, 1)
                 self.assertEqual(p.state[VARS].exhaust_fan_speed, speed)
 
+    def test_missing_or_non_numeric_profile_values_are_refused(self):
+        cases = [('chamber_hold_minutes', 'abc'), ('passive_rest_minutes', None), ('chamber_target_temp', 'abc'),
+                 ('cooldown_ramp_step_c', 'abc'), ('cooldown_ramp_step_seconds', None), ('exhaust_fan_speed', 'abc'),
+                 ('chamber_hold_minutes', Ellipsis), ('exhaust_fan_speed', Ellipsis), ('chamber_hold_minutes', '60')]
+        for key, value in cases:
+            with self.subTest(key=key, value=value):
+                p = Printer()
+                self.custom_profile(p, **{key: value})
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')  # must not raise
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertNotIn('_COOLDOWN_LOOP', p.delays)
+                message = [c for c in self.messages(p) if 'Invalid cooldown profile CUSTOM' in c]
+                self.assertEqual(len(message), 1)
+                self.assertIn(key, message[0])
+                self.assertNotIn(';', message[0])
+
+    def test_profile_that_is_not_a_table_is_refused(self):
+        for value in ['oops', None, [1, 2]]:
+            with self.subTest(value=value):
+                p = Printer()
+                p.state['gcode_macro _COOLDOWN_PROFILES'].profiles['CUSTOM'] = value
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.assertEqual(p.state[VARS].phase, 0)
+
+    def test_fractional_minutes_are_honoured(self):
+        p = Printer()
+        self.custom_profile(p, chamber_hold_minutes=60.9, passive_rest_minutes=0.5)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        self.assertEqual(p.state[VARS].hold_loops, 730)
+        self.assertEqual(p.state[VARS].passive_loops, 6)
+
 
 if __name__ == '__main__':
     unittest.main()

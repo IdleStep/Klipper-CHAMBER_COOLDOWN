@@ -93,7 +93,9 @@ is released. The normal idle timeout still limits the exhaust and chill phases.
 Ramping profiles step 1°C every 120 seconds. Field meanings and limits are
 documented at the top of [`profiles.cfg`](profiles.cfg); START_COOLDOWN refuses a
 ramp step at or below 0°C, a step time under 5 seconds, negative times, or an
-exhaust speed outside 0.0 to 1.0. The material map keeps Turbo's effective
+exhaust speed outside 0.0 to 1.0. It also refuses a profile whose values are
+missing or are not numbers (a value in quotes is text), and honors fractional
+minutes (a 0.5 minute hold is 30 seconds). The material map keeps Turbo's effective
 behavior, including HIPS and PCTG falling back to PASSIVE_ONLY.
 
 ## Integrating with print macros
@@ -128,6 +130,7 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `Cooldown stopped: chamber, bed or fan settings were changed by hand` | A tracked target or fan speed changed outside the cooldown. |
 | `Cooldown stopped: the printer started printing` | A new print began. |
 | `Unknown cooldown profile` / `Invalid cooldown profile` | Nothing was started; check the name or profile values. |
+| `Invalid cooldown profile NAME: chamber_hold_minutes, exhaust_fan_speed must be numbers. Cooldown not started.` | A profile value is missing or is text; the message lists the keys. |
 | `chamber_cooled_temp in _COOLDOWN_VARS must be a number. Cooldown not started.` | The setting is text or empty; nothing was started. Fix it in `cooldown-local.cfg`. |
 | `Cooldown stopped: a value in _COOLDOWN_VARS is not valid` | A tick found a state value that is not a number, or a phase outside 1-5, and reset the cooldown. Something wrote to `_COOLDOWN_VARS` directly. |
 | `Cooldown complete` | Heater and controlled fans are off. |
