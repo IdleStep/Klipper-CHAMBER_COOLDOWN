@@ -47,7 +47,7 @@ variable_chamber_cooled_temp: 35
 | Command | Behavior |
 |---|---|
 | `COOLDOWN_SELECT MATERIAL=ASA` | Picks the profile mapped to the material; unknown materials get the table's `DEFAULT` (PASSIVE_ONLY). |
-| `START_COOLDOWN` | Starts the selected profile (PASSIVE_ONLY when none was selected). `PROFILE=NAME` overrides the selection. Unknown or invalid profiles report an error and do not start. |
+| `START_COOLDOWN` | Starts the selected profile (PASSIVE_ONLY when none was selected). `PROFILE=NAME` overrides the selection and may be typed in any case. An unknown profile reports the known profile names, and an invalid one reports what is wrong with it; neither starts. |
 | `COOLDOWN_STATUS` | Shows profile, phase number and name, and time in the phase. |
 | `COOLDOWN_RESET` | Stops the cooldown, clears the selection and restores an idle timeout the cooldown raised. Heaters and fans are left as they are. |
 
@@ -129,7 +129,8 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `Chamber → 041.0/042.0 • Bed → 034.0/035.0 • Cycle 005` | Temperatures at the start of each phase and every 25 s: reading / displayed target. The displayed target is the heater target or `chamber_cooled_temp`, whichever is higher. Arrows compare the reading with it: above (↑), within 2°C below (→), further below (↓). |
 | `Cooldown stopped: chamber, bed or fan settings were changed by hand` | A tracked target or fan speed changed outside the cooldown. |
 | `Cooldown stopped: the printer started printing` | A new print began. |
-| `Unknown cooldown profile` / `Invalid cooldown profile` | Nothing was started; check the name or profile values. |
+| `Unknown cooldown profile: NAME. Known profiles: HOLD_120M_COOL_NO_EX, ...` | Nothing was started; the message lists the valid names (a quote mark in the typed name is shown as `'`). |
+| `Invalid cooldown profile` | Nothing was started; the profile's values are wrong, and the message says which. |
 | `Invalid cooldown profile NAME: chamber_hold_minutes, exhaust_fan_speed must be numbers. Cooldown not started.` | A profile value is missing or is text; the message lists the keys. |
 | `chamber_cooled_temp in _COOLDOWN_VARS must be a number. Cooldown not started.` | The setting is text or empty; nothing was started. Fix it in `cooldown-local.cfg`. |
 | `Cooldown stopped: a value in _COOLDOWN_VARS is not valid` | A tick found a state value that is not a number, or a phase outside 1-5, and reset the cooldown. Something wrote to `_COOLDOWN_VARS` directly. |

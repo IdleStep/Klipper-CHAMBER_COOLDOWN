@@ -58,6 +58,10 @@ Requires Hardware Controls 1.0.0 or later.
   silently selected the DEFAULT profile.
 
 ### Changed
+- `START_COOLDOWN PROFILE=` accepts a profile name in any case (materials
+  already did), and `Unknown cooldown profile` now lists the known profiles. A
+  `"` in the typed name is shown as `'`; it used to make the message itself fail
+  with `Malformed command`.
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.
 - A phase the profile does not use still prints its numbered banner, marked
   skipped (`Cooldown phase 2/5 RAMP: skipped, profile has no ramp`), instead of

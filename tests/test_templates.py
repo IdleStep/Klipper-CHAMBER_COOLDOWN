@@ -458,6 +458,24 @@ class Templates(unittest.TestCase):
                 p.run('COOLDOWN_SELECT', MATERIAL=material)
                 self.assertEqual(p.state[VARS].cooldown_profile, 'HOLD_60M_COOL_EX')
 
+    def test_profile_name_in_any_case_and_known_profiles_listed(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='immediate_ex')
+        self.assertEqual(p.state[VARS].cooldown_profile, 'IMMEDIATE_EX')
+        self.assertEqual(p.state[VARS].phase, 1)
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='NOPE')
+        message = [c for c in self.messages(p) if 'Unknown cooldown profile' in c]
+        self.assertEqual(len(message), 1)
+        self.assertIn('Known profiles: HOLD_120M_COOL_NO_EX, HOLD_30M_COOL_EX', message[0])
+        self.assertNotIn(';', message[0])
+
+    def test_double_quote_in_profile_name_does_not_break_the_message(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='a"b')  # raised a Malformed command before
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertTrue(any("a'b" in c for c in self.messages(p)))
+
 
 if __name__ == '__main__':
     unittest.main()
