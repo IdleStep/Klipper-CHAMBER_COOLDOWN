@@ -30,4 +30,10 @@ baseline:
 - HIPS and PCTG keep their PASSIVE_ONLY fallback from Turbo's old retraction table.
   Changing intended profiles is separate work.
 
+- Profile and material names should be `A-Z`, `0-9` and `_`. A quote mark in a
+  profile name is refused, because the name is stored with
+  `SET_GCODE_VARIABLE` and a quote breaks that command. Mainline Klipper also
+  cuts a `;`, `#` or `*` out of a command line before any macro sees it, even
+  inside quotes (Kalico keeps them), so such a name could not be typed there.
+
 Isolated template checks do not establish full thermal or firmware equivalence.

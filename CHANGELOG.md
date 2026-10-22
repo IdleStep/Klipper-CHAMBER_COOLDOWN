@@ -59,6 +59,10 @@ Requires Hardware Controls 1.0.0 or later.
   `_HARDWARE_VARS` names the wrong object. A tick that finds a reading that is
   not a number stops the cooldown with `Cooldown stopped: the chamber or bed
   temperature cannot be read`; the tick used to raise and strand the loop.
+- A profile name with a quote mark (`O'NEIL`) is refused by START_COOLDOWN with
+  `profile names cannot contain quote marks`, and COOLDOWN_SELECT refuses to
+  store one. START used to fail half way through, after it had raised the idle
+  timeout.
 - COOLDOWN_SELECT trims whitespace around the material. `MATERIAL=" ASA"`
   silently selected the DEFAULT profile.
 

@@ -131,6 +131,8 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `Cooldown stopped: the printer started printing` | A new print began. |
 | `Unknown cooldown profile: NAME. Known profiles: HOLD_120M_COOL_NO_EX, ...` | Nothing was started; the message lists the valid names (a quote mark in the typed name is shown as `'`). |
 | `Invalid cooldown profile` | Nothing was started; the profile's values are wrong, and the message says which. |
+| `Invalid cooldown profile NAME: profile names cannot contain quote marks. Cooldown not started.` | A profile in the table has `'` or `"` in its name. Rename it (names are `A-Z`, `0-9` and `_`). |
+| `The profile for this material has a quote mark in its name, which is not allowed. Profile not changed.` | COOLDOWN_SELECT found a quote mark in the profile name the material map points to, and left the selection as it was. |
 | `Invalid cooldown profile NAME: chamber_hold_minutes, exhaust_fan_speed must be numbers. Cooldown not started.` | A profile value is missing or is text; the message lists the keys. |
 | `chamber_cooled_temp in _COOLDOWN_VARS must be a number. Cooldown not started.` | The setting is text or empty; nothing was started. Fix it in `cooldown-local.cfg`. |
 | `chamber_sensor in _HARDWARE_VARS has no temperature. Cooldown not started.` (and the same for `bed_heater`) | The named object exists but is not a temperature device, so the name in `_HARDWARE_VARS` is wrong. |

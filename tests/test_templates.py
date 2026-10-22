@@ -505,6 +505,36 @@ class Templates(unittest.TestCase):
         p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
         self.assertEqual(p.state[VARS].phase, 1)
 
+    def test_profile_names_with_quotes_are_refused_at_start(self):
+        for name in ["O'NEIL", 'A"B']:
+            with self.subTest(name=name):
+                p = Printer()
+                table = p.state['gcode_macro _COOLDOWN_PROFILES'].profiles
+                table[name] = wrap(dict(table['HOLD_60M_COOL_EX']))
+                p.run('START_COOLDOWN', PROFILE=name)  # must not raise
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertNotIn('_COOLDOWN_LOOP', p.delays)
+                self.assertEqual(p.state[VARS].cooldown_profile, 'PASSIVE_ONLY')
+                self.assertFalse(any(c.startswith('SET_IDLE_TIMEOUT') for c in p.commands))
+                message = [c for c in self.messages(p) if 'cannot contain quote marks' in c]
+                self.assertEqual(len(message), 1)
+                self.assertNotIn('"A"B"', message[0])
+
+    def test_cooldown_select_refuses_a_profile_with_a_quote(self):
+        for name in ["O'NEIL", 'A"B']:
+            with self.subTest(name=name):
+                p = Printer()
+                p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['XX'] = name
+                p.run('COOLDOWN_SELECT', MATERIAL='XX')  # must not raise
+                self.assertEqual(p.state[VARS].cooldown_profile, 'PASSIVE_ONLY')
+                self.assertTrue(any('quote mark' in c for c in self.messages(p)))
+
+    def test_plain_profile_names_still_work(self):
+        p = Printer()
+        p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['XX'] = 'HOLD_60M_COOL_EX'
+        p.run('COOLDOWN_SELECT', MATERIAL='XX')
+        self.assertEqual(p.state[VARS].cooldown_profile, 'HOLD_60M_COOL_EX')
+
 
 if __name__ == '__main__':
     unittest.main()
