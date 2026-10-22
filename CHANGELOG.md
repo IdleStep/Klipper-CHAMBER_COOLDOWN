@@ -90,6 +90,9 @@ Requires Hardware Controls 1.0.0 or later.
   0.05 is below the fan minimum, so these fans run at their minimum instead:
   exhaust_fan (0.2)`. Mainline Klipper treats a speed under `off_below` as off. The
   shipped profiles use 0.0 and 1.0 and are unaffected.
+- The `changed by hand` stop names what changed (`chamber target`, `bed target`,
+  `exhaust fan speed`, `bed fans speed`) and says the rest of the cooldown is
+  cancelled and the heaters and fans stay as set. The line starts as before.
 - COOLDOWN_SELECT says `Unknown material ASAA, using the DEFAULT profile
   PASSIVE_ONLY` when the material is not in the table. A typo used to select
   DEFAULT without a word. A blank `MATERIAL=` still selects DEFAULT silently.

@@ -769,6 +769,50 @@ class Templates(unittest.TestCase):
                 self.assertTrue(any(stop in c for c in p.commands))
                 self.assertFalse(any('Cooldown reset' in c for c in p.commands))
 
+    def test_hand_change_stop_names_what_changed_and_leaves_it_alone(self):
+        def chamber(p):
+            p.state[CHAMBER].target = 0.
+
+        def bed(p):
+            p.state['heater_bed'].target = 60.
+
+        def exhaust(p):
+            p.state['fan_generic exhaust_fan'].speed = 0.5
+
+        def bed_fans(p):
+            p.state['fan_generic bed_fans'].speed = 0.5
+
+        for name, change in [('chamber target', chamber), ('bed target', bed), ('exhaust fan speed', exhaust),
+                             ('bed fans speed', bed_fans)]:
+            for profile in ['HOLD_60M_COOL_EX', 'IMMEDIATE_EX']:
+                with self.subTest(changed=name, profile=profile):
+                    p = Printer()
+                    p.state['fan_generic bed_fans'] = wrap({'speed': 0.})
+                    p.run('START_COOLDOWN', PROFILE=profile)
+                    if profile == 'HOLD_60M_COOL_EX':
+                        self.run_until(p, 2, limit=1)  # still in HOLD, a RAMP would have followed
+                    change(p)
+                    before = len(p.commands)
+                    p.run('_COOLDOWN_LOOP')
+                    self.assertEqual(p.state[VARS].phase, 0)
+                    self.assertEqual(p.delays['_COOLDOWN_LOOP'], 0)  # the loop is cancelled
+                    stop = [c for c in p.commands[before:] if 'changed by hand' in c]
+                    self.assertEqual(len(stop), 1)
+                    self.assertIn('hand (%s).' % name, stop[0])
+                    self.assertIn('cancelled', stop[0])
+                    self.assertNotIn(';', stop[0].split('MSG=')[1])
+                    self.assertFalse(any(c.startswith(('CHAMBER', 'EXHAUST_FAN', 'BED_FANS', 'RESET_FANS'))
+                                         for c in p.commands[before:]))
+
+    def test_hand_change_stop_lists_every_change(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.state[CHAMBER].target = 0.
+        p.state['heater_bed'].target = 60.
+        p.run('_COOLDOWN_LOOP')
+        stop = [c for c in p.commands if 'changed by hand' in c][0]
+        self.assertIn('(chamber target, bed target)', stop)
+
     def test_completion_does_not_add_a_reset_line(self):
         p = Printer()
         p.state[CHAMBER].update(target=30., temperature=30.)

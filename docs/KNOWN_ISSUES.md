@@ -21,6 +21,10 @@ baseline:
   idle timeout, but leaves heaters and fans alone. PRINT_START and UI preheats call
   it after setting their own targets. Completion turns the chamber heater and
   controlled fans off.
+- Changing the chamber target, bed target, exhaust fan speed or bed fan speed by
+  hand cancels the whole cooldown, including turning the chamber heater off to
+  end a hold early. The stop message names what changed. Nothing is skipped
+  ahead to the rest phase, and the heaters and fans stay as you set them.
 - Report arrows show above / near / below the displayed target, not a
   temperature trend.
 - A phase the profile does not use still prints its numbered banner, marked
