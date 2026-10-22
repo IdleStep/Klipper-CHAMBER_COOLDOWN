@@ -535,6 +535,35 @@ class Templates(unittest.TestCase):
         p.run('COOLDOWN_SELECT', MATERIAL='XX')
         self.assertEqual(p.state[VARS].cooldown_profile, 'HOLD_60M_COOL_EX')
 
+    def test_ramp_step_seconds_is_rounded_to_five_and_reported(self):
+        for seconds, real in [(7, 5), (8, 10), (9, 10), (12, 10), (13, 15), (5, 5), (10, 10), (120, 120)]:
+            with self.subTest(seconds=seconds):
+                p = Printer()
+                self.custom_profile(p, cooldown_ramp_step_seconds=seconds)
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.assertEqual(p.state[VARS].phase, 1)
+                self.assertEqual(p.state[VARS].cooldown_ramp_step_seconds, real)
+                self.assertEqual(p.state[VARS].ramp_step_loops, real // 5)
+                notes = [c for c in self.messages(p) if 'runs as' in c]
+                self.assertEqual(len(notes), 0 if seconds == real else 1)
+                if notes:
+                    self.assertIn('%d s runs as %d s' % (seconds, real), notes[0])
+
+    def test_ramp_step_below_five_is_still_refused(self):
+        for seconds in [0, 4, 4.9]:
+            with self.subTest(seconds=seconds):
+                p = Printer()
+                self.custom_profile(p, cooldown_ramp_step_seconds=seconds)
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.assertEqual(p.state[VARS].phase, 0)
+
+    def test_step_seconds_is_left_alone_when_there_is_no_ramp(self):
+        p = Printer()
+        self.custom_profile(p, chamber_target_temp=0, cooldown_ramp_step_seconds=3)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        self.assertEqual(p.state[VARS].phase, 1)
+        self.assertFalse(any('runs as' in c for c in self.messages(p)))
+
 
 if __name__ == '__main__':
     unittest.main()

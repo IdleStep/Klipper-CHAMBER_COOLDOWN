@@ -71,6 +71,12 @@ Requires Hardware Controls 1.0.0 or later.
   already did), and `Unknown cooldown profile` now lists the known profiles. A
   `"` in the typed name is shown as `'`; it used to make the message itself fail
   with `Malformed command`.
+- A ramp step time that is not a multiple of 5 seconds is rounded to the nearest
+  5 (the loop ticks every 5 seconds), and START_COOLDOWN prints `Ramp step of 7 s
+  runs as 5 s because the loop ticks every 5 s`. It used to run at the next
+  lower multiple while the RAMP banner and the idle-timeout estimate used the
+  requested time. A step time under 5 seconds is still refused, and a profile
+  without a ramp is left alone.
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.
 - A phase the profile does not use still prints its numbered banner, marked
   skipped (`Cooldown phase 2/5 RAMP: skipped, profile has no ramp`), instead of

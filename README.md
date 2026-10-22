@@ -95,7 +95,10 @@ documented at the top of [`profiles.cfg`](profiles.cfg); START_COOLDOWN refuses 
 ramp step at or below 0°C, a step time under 5 seconds, negative times, or an
 exhaust speed outside 0.0 to 1.0. It also refuses a profile whose values are
 missing or are not numbers (a value in quotes is text), and honors fractional
-minutes (a 0.5 minute hold is 30 seconds). The material map keeps Turbo's effective
+minutes (a 0.5 minute hold is 30 seconds). Because the loop ticks every 5
+seconds, a ramp step time is rounded to the nearest 5 seconds (5 is the
+minimum) and START_COOLDOWN says so; the banner and the idle-timeout estimate
+use the rounded time. The material map keeps Turbo's effective
 behavior, including HIPS and PCTG falling back to PASSIVE_ONLY.
 
 ## Integrating with print macros
@@ -121,6 +124,7 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | Message | Meaning |
 |---|---|
 | `Cooldown started with profile: NAME` | START_COOLDOWN accepted the profile. |
+| `Ramp step of N s runs as M s because the loop ticks every 5 s` | The profile's `cooldown_ramp_step_seconds` is not a multiple of 5; it runs at the nearest multiple. |
 | `Cooldown phase N/5 NAME: ...` | A phase started. `skipped` means the profile does not use it. |
 | `Cooldown HOLD: 2.0 of 60.0 min`, `Cooldown RAMP: ...`, `Cooldown REST: ...`, `Cooldown CHILL: ...` | Phase progress, every 2 minutes. |
 | `Hold complete`, `Ramp target reached`, `Rest complete` | A phase finished. |
