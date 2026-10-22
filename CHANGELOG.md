@@ -77,6 +77,11 @@ Requires Hardware Controls 1.0.0 or later.
   lower multiple while the RAMP banner and the idle-timeout estimate used the
   requested time. A step time under 5 seconds is still refused, and a profile
   without a ramp is left alone.
+- The check for a new print reads `print_stats.state` (`printing`) instead of
+  `idle_timeout.state` with a five-tick guard. `idle_timeout` can read `Printing`
+  after a move, dwell or homing, so a `G4 P30000` or a `G28` during the chill
+  phase could stop the cooldown as if a print had started. The message is
+  unchanged, and a printer without `print_stats` has no check.
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.
 - A phase the profile does not use still prints its numbered banner, marked
   skipped (`Cooldown phase 2/5 RAMP: skipped, profile has no ramp`), instead of

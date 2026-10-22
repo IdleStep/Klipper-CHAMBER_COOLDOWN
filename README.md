@@ -73,7 +73,8 @@ Every phase prints a numbered banner, so a cooldown always counts from 1/5 to
 At any phase, the cooldown **completes** (chamber heater and controlled fans off)
 once chamber and bed are at or below `chamber_cooled_temp`. It **stops** without
 touching heaters or fans if you change the chamber target, bed target, exhaust
-or bed fan speed by hand, or a print starts.
+or bed fan speed by hand, or a print starts (Klipper's `print_stats.state` becomes
+`printing`; homing, probing and other moves do not stop it).
 
 When hold, ramp and rest would outlast `[idle_timeout]`, START_COOLDOWN raises
 the timeout for those phases and restores the configured value when the heater
@@ -132,7 +133,7 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `No exhaust, external_pc or bed_fans fan configured, skipping exhaust` | Phase 4 found none of the three fans to set. |
 | `Chamber → 041.0/042.0 • Bed → 034.0/035.0 • Cycle 005` | Temperatures at the start of each phase and every 25 s: reading / displayed target. The displayed target is the heater target or `chamber_cooled_temp`, whichever is higher. Arrows compare the reading with it: above (↑), within 2°C below (→), further below (↓). |
 | `Cooldown stopped: chamber, bed or fan settings were changed by hand` | A tracked target or fan speed changed outside the cooldown. |
-| `Cooldown stopped: the printer started printing` | A new print began. |
+| `Cooldown stopped: the printer started printing` | A print started (`print_stats.state` is `printing`) while the cooldown was running. |
 | `Unknown cooldown profile: NAME. Known profiles: HOLD_120M_COOL_NO_EX, ...` | Nothing was started; the message lists the valid names (a quote mark in the typed name is shown as `'`). |
 | `Invalid cooldown profile` | Nothing was started; the profile's values are wrong, and the message says which. |
 | `Invalid cooldown profile NAME: profile names cannot contain quote marks. Cooldown not started.` | A profile in the table has `'` or `"` in its name. Rename it (names are `A-Z`, `0-9` and `_`). |

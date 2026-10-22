@@ -564,6 +564,27 @@ class Templates(unittest.TestCase):
         self.assertEqual(p.state[VARS].phase, 1)
         self.assertFalse(any('runs as' in c for c in self.messages(p)))
 
+    def test_print_check_uses_print_stats_not_idle_timeout(self):
+        p = Printer()
+        p.state['print_stats'] = wrap({'state': 'standby'})
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.run_until(p, 5)
+        for _ in range(8):
+            p.state['idle_timeout'].state = 'Printing'  # G4, homing, QGL, LOAD_FILAMENT ...
+            p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].phase, 5)
+        p.state['print_stats'].state = 'printing'
+        p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertTrue(any('started printing' in c for c in self.messages(p)))
+
+    def test_print_check_without_print_stats_object(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.run_until(p, 5)
+        p.run('_COOLDOWN_LOOP')  # no 'print_stats' in printer: must not raise
+        self.assertEqual(p.state[VARS].phase, 5)
+
 
 if __name__ == '__main__':
     unittest.main()

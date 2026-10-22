@@ -30,6 +30,11 @@ baseline:
 - HIPS and PCTG keep their PASSIVE_ONLY fallback from Turbo's old retraction table.
   Changing intended profiles is separate work.
 
+- The print check reads `print_stats.state`, which only a file print sets (a
+  printer without a `print_stats` object has no check). It replaced a test of
+  `idle_timeout.state`, which can read `Printing` after a move, dwell or homing,
+  not only during a print. Klipper-Configs' PRINT_START calls `COOLDOWN_RESET`
+  first, so the check matters only for a print started some other way.
 - The cooldown cannot read the idle timeout in force (a macro only sees the
   configured `[idle_timeout]` value). When a profile needs a longer timeout it
   sets one computed from the configured value, and at phase 3, on completion or
