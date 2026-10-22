@@ -295,6 +295,41 @@ class Templates(unittest.TestCase):
                 if not started:
                     self.assertFalse(any(c.startswith('SET_IDLE_TIMEOUT') for c in p.commands))
 
+    def fan_minimum_printer(self, speed, **minimums):
+        """Immediate-exhaust profile at `speed`; minimums maps a fan name to its fan_generic settings."""
+        p = Printer()
+        p.state['fan_generic bed_fans'] = wrap({'speed': 0.})
+        for name, fan_settings in minimums.items():
+            p.state['configfile'].settings['fan_generic ' + name] = wrap(fan_settings)
+        self.custom_profile(p, chamber_hold_minutes=0, chamber_target_temp=0, cooldown_ramp_step_c=0,
+                            cooldown_ramp_step_seconds=0, exhaust_fan_speed=speed)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        self.run_until(p, 5)
+        return p
+
+    def test_speed_below_a_fan_minimum_is_raised_and_reported(self):
+        p = self.fan_minimum_printer(0.05, exhaust_fan={'min_power': 0.2}, external_pc={'min_power': None, 'off_below': 0.1})
+        self.assertEqual(p.state['fan_generic exhaust_fan'].speed, 0.2)
+        self.assertEqual(p.state['fan_generic external_pc'].speed, 0.1)
+        self.assertEqual(p.state['fan_generic bed_fans'].speed, 0.05)  # no minimum configured
+        warnings = [c for c in self.messages(p) if 'below the fan minimum' in c]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('exhaust_fan (0.2), external_pc (0.1)', warnings[0])
+        self.assertNotIn('bed_fans', warnings[0])
+        self.assertEqual(p.state[VARS].phase, 5)  # the raised speeds are not seen as a hand change
+
+    def test_speed_at_or_above_the_minimum_or_zero_is_left_alone(self):
+        for speed, enable in [(0.2, True), (0.5, True), (1.0, True), (0.0, True), (0.05, False)]:
+            with self.subTest(speed=speed, enable=enable):
+                p = Printer()
+                p.state['configfile'].settings['fan_generic exhaust_fan'] = wrap({'min_power': 0.2})
+                self.custom_profile(p, chamber_hold_minutes=0, chamber_target_temp=0, cooldown_ramp_step_c=0,
+                                    cooldown_ramp_step_seconds=0, exhaust_fan_speed=speed, exhaust_enable=enable)
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.run_until(p, 5)
+                self.assertEqual(p.state['fan_generic exhaust_fan'].speed, speed if enable else 0)
+                self.assertFalse(any('below the fan minimum' in c for c in self.messages(p)))
+
     def test_ramp_step_does_not_overshoot(self):
         p = Printer()
         p.state['heater_generic chamber'].target = 44.

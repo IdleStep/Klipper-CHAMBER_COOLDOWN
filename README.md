@@ -64,7 +64,7 @@ the next phase, or advances the current one.
 | 1 HOLD | Chamber heater keeps its print target. | Hold time passes. Skipped when the profile has no hold. Without a chamber heater, or when the target is already below the ramp target, the cooldown goes straight to phase 3. |
 | 2 RAMP | Target drops `cooldown_ramp_step_c` every `cooldown_ramp_step_seconds`, never below the ramp target. | Target reaches the ramp target. Skipped when the profile has none. |
 | 3 REST | Chamber heater off; exhaust off if the rest is longer than 0. | Rest time passes. Skipped when the profile has no rest. |
-| 4 EXHAUST | Exhaust, external_pc and bed fans set to the profile speed (0 when `exhaust_enable` is False). | On the next tick. |
+| 4 EXHAUST | Exhaust, external_pc and bed fans set to the profile speed (0 when `exhaust_enable` is False). A speed above 0 that is below a fan's `min_power` (or `off_below`) is raised to that minimum for that fan. | On the next tick. |
 | 5 CHILL | Waits; fans keep running. | Chamber and bed at or below `chamber_cooled_temp`. |
 
 Every phase prints a numbered banner, so a cooldown always counts from 1/5 to
@@ -126,6 +126,7 @@ Add guarded calls to existing macros rather than replacing them, and never write
 |---|---|
 | `Cooldown started with profile: NAME` | START_COOLDOWN accepted the profile. |
 | `Ramp step of N s runs as M s because the loop ticks every 5 s` | The profile's `cooldown_ramp_step_seconds` is not a multiple of 5; it runs at the nearest multiple. |
+| `exhaust_fan_speed 0.05 is below the fan minimum, so these fans run at their minimum instead: exhaust_fan (0.2)` | The profile's fan speed is under the `min_power` (or `off_below`) of the listed fans, which run at that minimum. |
 | `Cooldown phase N/5 NAME: ...` | A phase started. `skipped` means the profile does not use it. |
 | `Cooldown HOLD: 2.0 of 60.0 min`, `Cooldown RAMP: ...`, `Cooldown REST: ...`, `Cooldown CHILL: ...` | Phase progress, every 2 minutes. |
 | `Hold complete`, `Ramp target reached`, `Rest complete` | A phase finished. |

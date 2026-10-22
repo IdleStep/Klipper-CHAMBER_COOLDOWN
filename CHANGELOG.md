@@ -85,6 +85,11 @@ Requires Hardware Controls 1.0.0 or later.
   after a move, dwell or homing, so a `G4 P30000` or a `G28` during the chill
   phase could stop the cooldown as if a print had started. The message is
   unchanged, and a printer without `print_stats` has no check.
+- A profile fan speed above 0 but under a fan's `min_power` (or `off_below`) is
+  raised to that minimum for that fan, and START_COOLDOWN prints `exhaust_fan_speed
+  0.05 is below the fan minimum, so these fans run at their minimum instead:
+  exhaust_fan (0.2)`. Mainline Klipper treats a speed under `off_below` as off. The
+  shipped profiles use 0.0 and 1.0 and are unaffected.
 - COOLDOWN_RESET prints `Cooldown reset` when it stops a running cooldown. The
   idle timeout or a print macro could end a cooldown without any message.
   Nothing is printed when no cooldown was running, and the cooldown's own stops
