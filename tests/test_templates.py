@@ -282,6 +282,19 @@ class Templates(unittest.TestCase):
         p.run('START_COOLDOWN', PROFILE='CUSTOM')
         self.assertEqual(p.state[VARS].phase, 1)
 
+    def test_tiny_ramp_step_is_refused_only_when_ramping(self):
+        for step, ramp_target, started in [(0.01, 42, False), (0.09, 42, False), (0.1, 42, True), (0.5, 42, True),
+                                           (0.01, 0, True)]:
+            with self.subTest(step=step, ramp_target=ramp_target):
+                p = Printer()
+                self.custom_profile(p, cooldown_ramp_step_c=step, chamber_target_temp=ramp_target)
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.assertEqual(p.state[VARS].phase, 1 if started else 0)
+                refused = [c for c in self.messages(p) if 'cooldown_ramp_step_c must be 0.1 or more' in c]
+                self.assertEqual(len(refused), 0 if started else 1)
+                if not started:
+                    self.assertFalse(any(c.startswith('SET_IDLE_TIMEOUT') for c in p.commands))
+
     def test_ramp_step_does_not_overshoot(self):
         p = Printer()
         p.state['heater_generic chamber'].target = 44.

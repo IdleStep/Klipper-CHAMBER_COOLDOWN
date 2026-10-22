@@ -66,6 +66,8 @@ Requires Hardware Controls 1.0.0 or later.
   silently selected the DEFAULT profile.
 - A profile with a negative `chamber_target_temp` is refused. It was read as "no
   ramp".
+- A ramping profile with `cooldown_ramp_step_c` under 0.1 is refused. A step of
+  0.01 made a 44-hour ramp and raised the idle timeout to match.
 
 ### Changed
 - `START_COOLDOWN PROFILE=` accepts a profile name in any case (materials

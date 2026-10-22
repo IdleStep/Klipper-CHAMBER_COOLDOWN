@@ -93,7 +93,7 @@ is released. The normal idle timeout still limits the exhaust and chill phases.
 
 Ramping profiles step 1°C every 120 seconds. Field meanings and limits are
 documented at the top of [`profiles.cfg`](profiles.cfg); START_COOLDOWN refuses a
-ramp step at or below 0°C, a step time under 5 seconds, negative times, a
+ramp step under 0.1°C (a ramp needs one), a step time under 5 seconds, negative times, a
 negative ramp target, or an exhaust speed outside 0.0 to 1.0. It also refuses a profile whose values are
 missing or are not numbers (a value in quotes is text), and honors fractional
 minutes (a 0.5 minute hold is 30 seconds). Because the loop ticks every 5
