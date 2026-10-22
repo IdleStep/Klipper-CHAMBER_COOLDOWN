@@ -265,6 +265,23 @@ class Templates(unittest.TestCase):
         self.assertIn('0 or more, exhaust_fan_speed must be', message)
         self.assertTrue(message.endswith('Cooldown not started."'))
 
+    def test_negative_ramp_target_is_refused(self):
+        p = Printer()
+        self.custom_profile(p, chamber_target_temp=-5)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertNotIn('_COOLDOWN_LOOP', p.delays)
+        self.assertFalse(any(c.startswith('SET_IDLE_TIMEOUT') for c in p.commands))
+        message = [c for c in self.messages(p) if 'Invalid cooldown profile CUSTOM: ' in c]
+        self.assertEqual(len(message), 1)
+        self.assertIn('chamber_target_temp must be 0 or more', message[0])
+
+    def test_zero_ramp_target_still_means_no_ramp(self):
+        p = Printer()
+        self.custom_profile(p, chamber_target_temp=0)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        self.assertEqual(p.state[VARS].phase, 1)
+
     def test_ramp_step_does_not_overshoot(self):
         p = Printer()
         p.state['heater_generic chamber'].target = 44.

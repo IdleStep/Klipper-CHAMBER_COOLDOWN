@@ -64,6 +64,8 @@ Requires Hardware Controls 1.0.0 or later.
   timeout.
 - COOLDOWN_SELECT trims whitespace around the material. `MATERIAL=" ASA"`
   silently selected the DEFAULT profile.
+- A profile with a negative `chamber_target_temp` is refused. It was read as "no
+  ramp".
 
 ### Changed
 - `START_COOLDOWN PROFILE=` accepts a profile name in any case (materials
