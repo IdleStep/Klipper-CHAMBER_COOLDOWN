@@ -30,6 +30,18 @@ baseline:
 - HIPS and PCTG keep their PASSIVE_ONLY fallback from Turbo's old retraction table.
   Changing intended profiles is separate work.
 
+- The cooldown cannot read the idle timeout in force (a macro only sees the
+  configured `[idle_timeout]` value). When a profile needs a longer timeout it
+  sets one computed from the configured value, and at phase 3, on completion or
+  on reset it writes the configured value back. A timeout you set yourself
+  (`SET_IDLE_TIMEOUT`, `DISABLE_TIMEOUT`, a pause) is therefore replaced, and a
+  longer one can be shortened during the hold and ramp.
+- Completion needs the bed reading at or below `chamber_cooled_temp`. A bed
+  target above it, left on after the print, stops the cooldown from completing;
+  the exhaust fans then run until the idle timeout ends the session.
+- `UPDATE_DELAYED_GCODE ID=_COOLDOWN_LOOP DURATION=0` typed by hand stops the
+  loop without resetting the cooldown, so it still shows a running phase and the
+  heater keeps its target. Use `COOLDOWN_RESET` to stop it.
 - Profile and material names should be `A-Z`, `0-9` and `_`. A quote mark in a
   profile name is refused, because the name is stored with
   `SET_GCODE_VARIABLE` and a quote breaks that command. Mainline Klipper also
