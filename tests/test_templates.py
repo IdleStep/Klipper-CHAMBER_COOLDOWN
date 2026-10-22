@@ -402,6 +402,26 @@ class Templates(unittest.TestCase):
         self.assertEqual(len(notes), 1)
         self.assertIn("Unknown material A'B,", notes[0])
 
+    def test_cooldown_select_refuses_a_profile_that_does_not_exist(self):
+        for material, mapped in [('XX', 'NOPE'), ('DEFAULT', 'NOPE'), ('YY', None)]:
+            with self.subTest(material=material, mapped=mapped):
+                p = Printer()
+                p.run('COOLDOWN_SELECT', MATERIAL='ASA')
+                p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table[material] = mapped
+                p.run('COOLDOWN_SELECT', MATERIAL=material)  # must not raise
+                self.assertEqual(p.state[VARS].cooldown_profile, 'HOLD_60M_COOL_EX')  # unchanged
+                refused = [c for c in self.messages(p) if 'which is not in the profile table' in c]
+                self.assertEqual(len(refused), 1)
+                self.assertIn('Profile not changed', refused[0])
+
+    def test_cooldown_select_accepts_a_profile_in_any_case(self):
+        p = Printer()
+        p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['XX'] = 'hold_60m_cool_ex'
+        p.run('COOLDOWN_SELECT', MATERIAL='XX')
+        self.assertEqual(p.state[VARS].cooldown_profile, 'hold_60m_cool_ex')
+        p.run('START_COOLDOWN')
+        self.assertEqual(p.state[VARS].phase, 1)
+
     def test_non_numeric_chamber_cooled_temp_is_refused_at_start(self):
         for value in ['35', None, [35]]:
             with self.subTest(value=value):

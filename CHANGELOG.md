@@ -93,6 +93,10 @@ Requires Hardware Controls 1.0.0 or later.
 - COOLDOWN_SELECT says `Unknown material ASAA, using the DEFAULT profile
   PASSIVE_ONLY` when the material is not in the table. A typo used to select
   DEFAULT without a word. A blank `MATERIAL=` still selects DEFAULT silently.
+- COOLDOWN_SELECT refuses a material that maps to a profile missing from the
+  profile table (`Material ASA maps to profile NAME, which is not in the profile
+  table. Profile not changed.`). A bad local override used to be selected and
+  failed at START_COOLDOWN, after the print.
 - COOLDOWN_RESET prints `Cooldown reset` when it stops a running cooldown. The
   idle timeout or a print macro could end a cooldown without any message.
   Nothing is printed when no cooldown was running, and the cooldown's own stops

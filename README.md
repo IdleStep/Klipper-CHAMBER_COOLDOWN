@@ -128,6 +128,7 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `Ramp step of N s runs as M s because the loop ticks every 5 s` | The profile's `cooldown_ramp_step_seconds` is not a multiple of 5; it runs at the nearest multiple. |
 | `exhaust_fan_speed 0.05 is below the fan minimum, so these fans run at their minimum instead: exhaust_fan (0.2)` | The profile's fan speed is under the `min_power` (or `off_below`) of the listed fans, which run at that minimum. |
 | `Unknown material ASAA, using the DEFAULT profile PASSIVE_ONLY` | COOLDOWN_SELECT did not find the material in the table and selected the table's `DEFAULT`. |
+| `Material ASA maps to profile NAME, which is not in the profile table. Profile not changed.` | COOLDOWN_SELECT found a profile name in the material table that has no entry in the profile table (a typo in a local override), and left the selection as it was. |
 | `Cooldown phase N/5 NAME: ...` | A phase started. `skipped` means the profile does not use it. |
 | `Cooldown HOLD: 2.0 of 60.0 min`, `Cooldown RAMP: ...`, `Cooldown REST: ...`, `Cooldown CHILL: ...` | Phase progress, every 2 minutes. |
 | `Hold complete`, `Ramp target reached`, `Rest complete` | A phase finished. |
