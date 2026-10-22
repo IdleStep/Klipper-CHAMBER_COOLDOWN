@@ -51,6 +51,9 @@ Requires Hardware Controls 1.0.0 or later.
   numbers and are unaffected.
 - Fractional hold and rest minutes are honored. They were truncated, so a hold
   of 0.5 minutes was no hold at all.
+- A chamber with only a sensor has no tracked target. Changing
+  `chamber_cooled_temp` during the cooldown no longer stops it with `changed by
+  hand`.
 
 ### Changed
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.

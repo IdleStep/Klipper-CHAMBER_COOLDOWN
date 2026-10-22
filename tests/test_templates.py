@@ -423,6 +423,15 @@ class Templates(unittest.TestCase):
         self.assertEqual(p.state[VARS].hold_loops, 730)
         self.assertEqual(p.state[VARS].passive_loops, 6)
 
+    def test_sensor_only_chamber_threshold_change_is_not_an_override(self):
+        p = self.sensor_printer(temperature=50.)
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.run_until(p, 5)
+        p.state[VARS].chamber_cooled_temp = 30
+        p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].phase, 5)
+        self.assertFalse(any('changed by hand' in c for c in p.commands))
+
 
 if __name__ == '__main__':
     unittest.main()
