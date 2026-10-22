@@ -432,6 +432,14 @@ class Templates(unittest.TestCase):
         self.assertEqual(p.state[VARS].phase, 5)
         self.assertFalse(any('changed by hand' in c for c in p.commands))
 
+    def test_status_shows_a_question_mark_outside_the_phase_range(self):
+        for phase in [-1, -6, 6, 9]:
+            with self.subTest(phase=phase):
+                p = Printer()
+                p.state[VARS].phase = phase
+                p.run('COOLDOWN_STATUS')
+                self.assertIn('Phase: %d ?' % phase, p.commands[-1])
+
 
 if __name__ == '__main__':
     unittest.main()
