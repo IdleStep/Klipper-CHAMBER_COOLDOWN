@@ -617,6 +617,48 @@ class Templates(unittest.TestCase):
         self.assertEqual(p.state[VARS].phase, 5)
         self.assertFalse(any('changed by hand' in c for c in p.commands))
 
+    def test_status_warns_when_the_loop_has_not_run_for_a_minute(self):
+        p = Printer()
+        p.state['toolhead'] = wrap({'estimated_print_time': 100.})
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        self.assertEqual(p.state[VARS].last_tick, 100.)
+        p.state['toolhead'].estimated_print_time = 130.
+        p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].last_tick, 130.)
+        p.state['toolhead'].estimated_print_time = 190.
+        p.run('COOLDOWN_STATUS')
+        self.assertFalse(any('cooldown loop last ran' in c for c in p.commands))
+        p.state['toolhead'].estimated_print_time = 400.  # the loop was stopped by hand
+        p.run('COOLDOWN_STATUS')
+        warnings = [c for c in self.messages(p) if 'cooldown loop last ran 270 s ago' in c]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('Run COOLDOWN_RESET', warnings[0])
+        p.run('_COOLDOWN_LOOP')
+        p.run('COOLDOWN_STATUS')
+        self.assertEqual(sum('cooldown loop last ran' in c for c in p.commands), 1)
+        p.run('COOLDOWN_RESET')
+        self.assertEqual(p.state[VARS].last_tick, 0)
+        p.state['toolhead'].estimated_print_time = 900.
+        p.run('COOLDOWN_STATUS')
+        self.assertEqual(sum('cooldown loop last ran' in c for c in p.commands), 1)
+
+    def test_status_without_a_toolhead_object_does_not_warn(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('_COOLDOWN_LOOP')
+        p.run('COOLDOWN_STATUS')  # no 'toolhead' in printer: must not raise
+        self.assertEqual(p.state[VARS].last_tick, 0)
+        self.assertFalse(any('cooldown loop last ran' in c for c in p.commands))
+
+    def test_a_toolhead_without_a_clock_does_not_raise(self):
+        p = Printer()
+        p.state['toolhead'] = wrap({'homed_axes': 'xyz'})  # Klipper-Configs' simulated toolhead has no clock
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('_COOLDOWN_LOOP')
+        p.run('COOLDOWN_STATUS')
+        self.assertEqual(p.state[VARS].phase, 1)
+        self.assertEqual(p.state[VARS].last_tick, 0)
+
     def test_status_shows_a_question_mark_outside_the_phase_range(self):
         for phase in [-1, -6, 6, 9]:
             with self.subTest(phase=phase):

@@ -50,7 +50,10 @@ baseline:
   the exhaust fans then run until the idle timeout ends the session.
 - `UPDATE_DELAYED_GCODE ID=_COOLDOWN_LOOP DURATION=0` typed by hand stops the
   loop without resetting the cooldown, so it still shows a running phase and the
-  heater keeps its target. Use `COOLDOWN_RESET` to stop it.
+  heater keeps its target. Use `COOLDOWN_RESET` to stop it. COOLDOWN_STATUS warns
+  when the loop has not run for a minute (the printer clock it compares comes
+  from `toolhead.estimated_print_time`); a busy printer can trigger the warning
+  too.
 - Profile and material names should be `A-Z`, `0-9` and `_`. A quote mark in a
   profile name is refused, because the name is stored with
   `SET_GCODE_VARIABLE` and a quote breaks that command. Mainline Klipper also

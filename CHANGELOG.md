@@ -90,6 +90,11 @@ Requires Hardware Controls 1.0.0 or later.
   0.05 is below the fan minimum, so these fans run at their minimum instead:
   exhaust_fan (0.2)`. Mainline Klipper treats a speed under `off_below` as off. The
   shipped profiles use 0.0 and 1.0 and are unaffected.
+- COOLDOWN_STATUS warns when a phase is running but the loop has not ticked for
+  over a minute (`The cooldown loop last ran 270 s ago ...`), which is what
+  `UPDATE_DELAYED_GCODE ID=_COOLDOWN_LOOP DURATION=0` or a stalled loop looks
+  like. Each tick and START record `toolhead.estimated_print_time` in the new
+  `last_tick` variable for it.
 - A rest longer than 0 turns off the external_pc and bed fans as well as the
   exhaust. Only the exhaust used to stop, so the chamber was not still while it
   rested. Phase 4 still sets all three to the profile speed. The only shipped
