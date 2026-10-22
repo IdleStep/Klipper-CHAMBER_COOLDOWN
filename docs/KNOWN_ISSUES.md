@@ -19,8 +19,8 @@ baseline:
 
 - COOLDOWN_RESET stops automation, clears the selection and restores an extended
   idle timeout, but leaves heaters and fans alone. PRINT_START and UI preheats call
-  it after setting their own targets. Completion turns the chamber heater and
-  controlled fans off.
+  it after setting their own targets. Completion turns the chamber heater, the bed
+  heater and every fan (the part fan and any fan you set by hand included) off.
 - Changing the chamber target, bed target, exhaust fan speed or bed fan speed by
   hand cancels the whole cooldown, including turning the chamber heater off to
   end a hold early. The stop message names what changed. Nothing is skipped

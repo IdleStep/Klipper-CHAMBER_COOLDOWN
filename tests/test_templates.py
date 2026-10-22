@@ -182,6 +182,35 @@ class Templates(unittest.TestCase):
         self.assertEqual(p.state['heater_generic chamber'].target, 0)
         self.assertIn('RESET_FANS', p.commands)
 
+    def test_completion_turns_every_heater_and_fan_off(self):
+        for bed_heater in ['heater_bed', 'heater_generic buildplate']:
+            with self.subTest(bed_heater=bed_heater):
+                p = Printer()
+                if bed_heater != 'heater_bed':
+                    p.state[bed_heater] = p.state.pop('heater_bed')
+                    p.state['gcode_macro _HARDWARE_VARS'].bed_heater = bed_heater
+                p.state[CHAMBER].update(target=30., temperature=30.)
+                p.state[bed_heater].update(target=30., temperature=30.)
+                p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+                p.state['fan'].speed = 0.7  # part fan and external_pc are not tracked, so they are not a hand change
+                p.state['fan_generic external_pc'].speed = 0.6
+                p.run('_COOLDOWN_LOOP')
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertEqual(p.state[CHAMBER].target, 0)
+                self.assertEqual(p.state[bed_heater].target, 0)
+                self.assertEqual(p.state['fan'].speed, 0)
+                self.assertEqual(p.state['fan_generic external_pc'].speed, 0)
+                self.assertEqual(p.state['fan_generic exhaust_fan'].speed, 0)
+
+    def test_completion_leaves_a_bed_that_is_already_off_alone(self):
+        p = Printer()
+        p.state[CHAMBER].update(target=30., temperature=30.)
+        p.state['heater_bed'].update(target=0., temperature=30.)
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertFalse(any(c.startswith('SET_HEATER_TEMPERATURE HEATER=heater_bed') for c in p.commands))
+
     def test_idle_timeout_extended_for_heated_phases_only(self):
         cases = [('HOLD_120M_COOL_NO_EX', 7200 + 13 * 120 + 600),
                  ('HOLD_60M_COOL_EX', 3600 + 13 * 120 + 600)]

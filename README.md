@@ -70,8 +70,10 @@ the next phase, or advances the current one.
 Every phase prints a numbered banner, so a cooldown always counts from 1/5 to
 5/5. A phase the profile does not use says `skipped`.
 
-At any phase, the cooldown **completes** (chamber heater and controlled fans off)
-once chamber and bed are at or below `chamber_cooled_temp`. It **stops** without
+At any phase, the cooldown **completes** once chamber and bed are at or below
+`chamber_cooled_temp`: the chamber and bed heaters and every fan (exhaust,
+external_pc, bed fans and the part fan, including any you set yourself) are
+turned off. It **stops** without
 touching heaters or fans if you change the chamber target, bed target, exhaust
 or bed fan speed by hand, or a print starts (Klipper's `print_stats.state` becomes
 `printing`; homing, probing and other moves do not stop it).
@@ -148,7 +150,7 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `chamber_sensor in _HARDWARE_VARS has no temperature. Cooldown not started.` (and the same for `bed_heater`) | The named object exists but is not a temperature device, so the name in `_HARDWARE_VARS` is wrong. |
 | `Cooldown stopped: the chamber or bed temperature cannot be read` | A tick found a reading that is not a number, and reset the cooldown. |
 | `Cooldown stopped: a value in _COOLDOWN_VARS is not valid` | A tick found a state value that is not a number, or a phase outside 1-5, and reset the cooldown. Something wrote to `_COOLDOWN_VARS` directly. |
-| `Cooldown complete` | Heater and controlled fans are off. |
+| `Cooldown complete` | The chamber and bed heaters and all fans are off. |
 | `Cooldown reset` | COOLDOWN_RESET stopped a running cooldown, for example from PRINT_START or the idle timeout. Nothing is printed when no cooldown was running, and the cooldown's own stops print only their own message. |
 
 ## Updates and rollback
