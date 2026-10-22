@@ -52,5 +52,8 @@ baseline:
   `SET_GCODE_VARIABLE` and a quote breaks that command. Mainline Klipper also
   cuts a `;`, `#` or `*` out of a command line before any macro sees it, even
   inside quotes (Kalico keeps them), so such a name could not be typed there.
+  START_COOLDOWN and COOLDOWN_SELECT therefore refuse a name with a quote mark,
+  semicolon, hash sign or asterisk, and show those characters as `?` in their
+  messages.
 
 Isolated template checks do not establish full thermal or firmware equivalence.

@@ -139,10 +139,10 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `Chamber → 041.0/042.0 • Bed → 034.0/035.0 • Cycle 005` | Temperatures at the start of each phase and every 25 s: reading / displayed target. The displayed target is the heater target or `chamber_cooled_temp`, whichever is higher. Arrows compare the reading with it: above (↑), within 2°C below (→), further below (↓). |
 | `Cooldown stopped: chamber, bed or fan settings were changed by hand` | A tracked target or fan speed changed outside the cooldown. |
 | `Cooldown stopped: the printer started printing` | A print started (`print_stats.state` is `printing`) while the cooldown was running. |
-| `Unknown cooldown profile: NAME. Known profiles: HOLD_120M_COOL_NO_EX, ...` | Nothing was started; the message lists the valid names (a quote mark in the typed name is shown as `'`). |
+| `Unknown cooldown profile: NAME. Known profiles: HOLD_120M_COOL_NO_EX, ...` | Nothing was started; the message lists the valid names (a quote mark in the typed name is shown as `'`, a semicolon, hash sign or asterisk as `?`). |
 | `Invalid cooldown profile` | Nothing was started; the profile's values are wrong, and the message says which. |
-| `Invalid cooldown profile NAME: profile names cannot contain quote marks. Cooldown not started.` | A profile in the table has `'` or `"` in its name. Rename it (names are `A-Z`, `0-9` and `_`). |
-| `The profile for this material has a quote mark in its name, which is not allowed. Profile not changed.` | COOLDOWN_SELECT found a quote mark in the profile name the material map points to, and left the selection as it was. |
+| `Invalid cooldown profile NAME: profile names cannot contain quote marks, semicolons, hash signs or asterisks. Cooldown not started.` | A profile in the table has a quote mark, `;`, `#` or `*` in its name (shown as `?`). Rename it (names are `A-Z`, `0-9` and `_`). |
+| `The profile for this material has a quote mark, semicolon, hash sign or asterisk in its name, which is not allowed. Profile not changed.` | COOLDOWN_SELECT found one of those characters in the profile name the material map points to, and left the selection as it was. |
 | `Invalid cooldown profile NAME: chamber_hold_minutes, exhaust_fan_speed must be numbers. Cooldown not started.` | A profile value is missing or is text; the message lists the keys. |
 | `chamber_cooled_temp in _COOLDOWN_VARS must be a number. Cooldown not started.` | The setting is text or empty; nothing was started. Fix it in `cooldown-local.cfg`. |
 | `chamber_sensor in _HARDWARE_VARS has no temperature. Cooldown not started.` (and the same for `bed_heater`) | The named object exists but is not a temperature device, so the name in `_HARDWARE_VARS` is wrong. |

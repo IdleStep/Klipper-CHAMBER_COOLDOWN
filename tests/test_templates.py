@@ -659,6 +659,28 @@ class Templates(unittest.TestCase):
                 self.assertEqual(p.state[VARS].cooldown_profile, 'PASSIVE_ONLY')
                 self.assertTrue(any('quote mark' in c for c in self.messages(p)))
 
+    def test_semicolon_hash_and_asterisk_in_profile_names_are_refused(self):
+        for name in ['A;B', 'A#B', 'A*B']:
+            with self.subTest(name=name):
+                p = Printer()
+                table = p.state['gcode_macro _COOLDOWN_PROFILES'].profiles
+                table[name] = wrap(dict(table['HOLD_60M_COOL_EX']))
+                p.run('START_COOLDOWN', PROFILE=name)  # must not raise
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertNotIn('_COOLDOWN_LOOP', p.delays)
+                self.assertFalse(any(c.startswith('SET_IDLE_TIMEOUT') for c in p.commands))
+                refused = [c for c in self.messages(p) if 'cannot contain quote marks, semicolons, hash signs or asterisks' in c]
+                self.assertEqual(len(refused), 1)
+                self.assertNotIn(';', refused[0].split('MSG=')[1])
+                p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['XX'] = name
+                p.run('COOLDOWN_SELECT', MATERIAL='XX')
+                self.assertEqual(p.state[VARS].cooldown_profile, 'PASSIVE_ONLY')
+                self.assertTrue(any('asterisk in its name' in c for c in self.messages(p)))
+                p.run('START_COOLDOWN', PROFILE='NOPE')  # the unknown-profile list echoes the bad key
+                listing = [c for c in self.messages(p) if 'Known profiles' in c][0].split('MSG=')[1]
+                self.assertNotIn(';', listing)
+                self.assertIn('A?B', listing)
+
     def test_plain_profile_names_still_work(self):
         p = Printer()
         p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['XX'] = 'HOLD_60M_COOL_EX'

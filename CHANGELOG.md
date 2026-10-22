@@ -97,6 +97,10 @@ Requires Hardware Controls 1.0.0 or later.
   profile table (`Material ASA maps to profile NAME, which is not in the profile
   table. Profile not changed.`). A bad local override used to be selected and
   failed at START_COOLDOWN, after the print.
+- A profile name with a `;`, `#` or `*` is refused like one with a quote mark
+  (`profile names cannot contain quote marks, semicolons, hash signs or
+  asterisks`). Mainline Klipper cuts those characters out of a command line, and
+  a `;` cut the refusal message itself. Messages show them as `?`.
 - COOLDOWN_SELECT reports a material table that is not a table (a list, text or
   nothing) and leaves the selection alone. It used to raise `Error evaluating`,
   which aborted the macro that called it, and so the print start.
