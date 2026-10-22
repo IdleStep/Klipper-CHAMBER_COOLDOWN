@@ -20,7 +20,10 @@ baseline:
   idle timeout, but leaves heaters and fans alone. PRINT_START and UI preheats call
   it after setting their own targets. Completion turns the chamber heater and
   controlled fans off.
-- Report arrows show above / near / below target, not a temperature trend.
+- Report arrows show above / near / below the displayed target, not a
+  temperature trend.
+- A phase the profile does not use still prints its numbered banner, marked
+  `skipped`, so the user sees every phase from 1/5 to 5/5.
 - The exhaust and chill phases have no separate deadline: the normal idle timeout
   applies once the heater is released.
 - HIPS and PCTG keep their PASSIVE_ONLY fallback from Turbo's old retraction table.

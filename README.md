@@ -47,7 +47,7 @@ variable_chamber_cooled_temp: 35
 | Command | Behavior |
 |---|---|
 | `COOLDOWN_SELECT MATERIAL=ASA` | Picks the profile mapped to the material; unknown materials get the table's `DEFAULT` (PASSIVE_ONLY). |
-| `START_COOLDOWN` | Starts the selected profile. `PROFILE=NAME` overrides the selection. Unknown or invalid profiles report an error and do not start. |
+| `START_COOLDOWN` | Starts the selected profile (PASSIVE_ONLY when none was selected). `PROFILE=NAME` overrides the selection. Unknown or invalid profiles report an error and do not start. |
 | `COOLDOWN_STATUS` | Shows profile, phase number and name, and time in the phase. |
 | `COOLDOWN_RESET` | Stops the cooldown, clears the selection and restores an idle timeout the cooldown raised. Heaters and fans are left as they are. |
 
@@ -61,11 +61,14 @@ the next phase, or advances the current one.
 
 | Phase | What happens | Ends when |
 |---|---|---|
-| 1 HOLD | Chamber heater keeps its print target. | Hold time passes. Skipped without a chamber heater or when the target is already below the ramp target. |
+| 1 HOLD | Chamber heater keeps its print target. | Hold time passes. Skipped when the profile has no hold. Without a chamber heater, or when the target is already below the ramp target, the cooldown goes straight to phase 3. |
 | 2 RAMP | Target drops `cooldown_ramp_step_c` every `cooldown_ramp_step_seconds`, never below the ramp target. | Target reaches the ramp target. Skipped when the profile has none. |
-| 3 REST | Chamber heater off; exhaust off if the rest is longer than 0. | Rest time passes. |
-| 4 EXHAUST | Exhaust, external_pc and bed fans set to the profile speed (0 when `exhaust_enable` is False). | Immediately. |
-| 5 CHILL | Waits. | Chamber and bed at or below `chamber_cooled_temp`. |
+| 3 REST | Chamber heater off; exhaust off if the rest is longer than 0. | Rest time passes. Skipped when the profile has no rest. |
+| 4 EXHAUST | Exhaust, external_pc and bed fans set to the profile speed (0 when `exhaust_enable` is False). | On the next tick. |
+| 5 CHILL | Waits; fans keep running. | Chamber and bed at or below `chamber_cooled_temp`. |
+
+Every phase prints a numbered banner, so a cooldown always counts from 1/5 to
+5/5. A phase the profile does not use says `skipped`.
 
 At any phase, the cooldown **completes** (chamber heater and controlled fans off)
 once chamber and bed are at or below `chamber_cooled_temp`. It **stops** without
@@ -115,8 +118,13 @@ Add guarded calls to existing macros rather than replacing them, and never write
 
 | Message | Meaning |
 |---|---|
-| `Cooldown phase N/5 NAME: ...` | A phase started. |
-| `Chamber → 041.0/042.0 • Bed ↓ ...` | Progress every 25 s: reading / target. Arrows: above (↑), within 2°C below (→), further below (↓) the target. |
+| `Cooldown started with profile: NAME` | START_COOLDOWN accepted the profile. |
+| `Cooldown phase N/5 NAME: ...` | A phase started. `skipped` means the profile does not use it. |
+| `Cooldown HOLD: 2.0 of 60.0 min`, `Cooldown RAMP: ...`, `Cooldown REST: ...`, `Cooldown CHILL: ...` | Phase progress, every 2 minutes. |
+| `Hold complete`, `Ramp target reached`, `Rest complete` | A phase finished. |
+| `No chamber heater, skipping hold and ramp`, `Chamber target ... is below the ramp target ..., skipping hold and ramp` | The cooldown goes from phase 1 straight to phase 3. |
+| `No exhaust or external_pc fan configured, skipping exhaust` | Phase 4 found no fan to set. |
+| `Chamber → 041.0/042.0 • Bed → 034.0/035.0 • Cycle 005` | Temperatures at the start of each phase and every 25 s: reading / displayed target. The displayed target is the heater target or `chamber_cooled_temp`, whichever is higher. Arrows compare the reading with it: above (↑), within 2°C below (→), further below (↓). |
 | `Cooldown stopped: chamber, bed or fan settings were changed by hand` | A tracked target or fan speed changed outside the cooldown. |
 | `Cooldown stopped: the printer started printing` | A new print began. |
 | `Unknown cooldown profile` / `Invalid cooldown profile` | Nothing was started; check the name or profile values. |
