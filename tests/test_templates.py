@@ -263,6 +263,32 @@ class Templates(unittest.TestCase):
         self.run_until(p, 5)
         self.assertEqual(p.state['fan_generic exhaust_fan'].speed, 1)
 
+    def test_rest_turns_external_pc_and_bed_fans_off_too(self):
+        p = Printer()
+        p.state['fan_generic bed_fans'] = wrap({'speed': 0.6})
+        p.state['fan_generic external_pc'].speed = 0.6
+        p.state['fan_generic exhaust_fan'].speed = 0.6
+        p.run('START_COOLDOWN', PROFILE='REST_5M_THEN_EX')
+        self.run_until(p, 3)
+        p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].phase, 3)
+        for fan in ['exhaust_fan', 'external_pc', 'bed_fans']:
+            self.assertEqual(p.state['fan_generic ' + fan].speed, 0, fan)
+        for _ in range(10):  # the rest keeps running: its own fan changes are not a hand change
+            p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].phase, 3)
+        self.run_until(p, 5)
+        for fan in ['exhaust_fan', 'external_pc', 'bed_fans']:
+            self.assertEqual(p.state['fan_generic ' + fan].speed, 1, fan)
+
+    def test_fans_are_left_alone_when_there_is_no_rest(self):
+        p = Printer()
+        p.state['fan_generic external_pc'].speed = 0.6
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        self.run_until(p, 3)
+        self.assertEqual(p.state[VARS].phase, 3)
+        self.assertEqual(p.state['fan_generic external_pc'].speed, 0.6)
+
     def test_exhaust_enable_is_honored(self):
         p = Printer()
         self.custom_profile(p, chamber_hold_minutes=0, chamber_target_temp=0,

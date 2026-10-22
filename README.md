@@ -63,7 +63,7 @@ the next phase, or advances the current one.
 |---|---|---|
 | 1 HOLD | Chamber heater keeps its print target. | Hold time passes. Skipped when the profile has no hold. Without a chamber heater, or when the target is already below the ramp target, the cooldown goes straight to phase 3. |
 | 2 RAMP | Target drops `cooldown_ramp_step_c` every `cooldown_ramp_step_seconds`, never below the ramp target. | Target reaches the ramp target. Skipped when the profile has none. |
-| 3 REST | Chamber heater off; exhaust off if the rest is longer than 0. | Rest time passes. Skipped when the profile has no rest. |
+| 3 REST | Chamber heater off; exhaust, external_pc and bed fans off if the rest is longer than 0. | Rest time passes. Skipped when the profile has no rest. |
 | 4 EXHAUST | Exhaust, external_pc and bed fans set to the profile speed (0 when `exhaust_enable` is False). A speed above 0 that is below a fan's `min_power` (or `off_below`) is raised to that minimum for that fan. | On the next tick. |
 | 5 CHILL | Waits; fans keep running. | Chamber and bed at or below `chamber_cooled_temp`. |
 

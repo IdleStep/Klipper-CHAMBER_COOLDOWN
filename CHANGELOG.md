@@ -90,6 +90,10 @@ Requires Hardware Controls 1.0.0 or later.
   0.05 is below the fan minimum, so these fans run at their minimum instead:
   exhaust_fan (0.2)`. Mainline Klipper treats a speed under `off_below` as off. The
   shipped profiles use 0.0 and 1.0 and are unaffected.
+- A rest longer than 0 turns off the external_pc and bed fans as well as the
+  exhaust. Only the exhaust used to stop, so the chamber was not still while it
+  rested. Phase 4 still sets all three to the profile speed. The only shipped
+  profile with a rest is REST_5M_THEN_EX.
 - Completion also turns the bed heater off (when its target is above 0), so a
   finished cooldown leaves no heater on. It already turned off the chamber heater
   and every fan, including the part fan and fans you set by hand.
