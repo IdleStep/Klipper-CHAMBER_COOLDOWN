@@ -100,6 +100,10 @@ Requires Hardware Controls 1.0.0 or later.
 - COOLDOWN_SELECT reports a material table that is not a table (a list, text or
   nothing) and leaves the selection alone. It used to raise `Error evaluating`,
   which aborted the macro that called it, and so the print start.
+- COOLDOWN_SELECT during a running cooldown prints `A cooldown is running, so the
+  material was not selected` and changes nothing. It used to overwrite the
+  profile name, so COOLDOWN_STATUS showed the wrong profile and a second
+  `START_COOLDOWN` started it.
 - COOLDOWN_RESET prints `Cooldown reset` when it stops a running cooldown. The
   idle timeout or a print macro could end a cooldown without any message.
   Nothing is printed when no cooldown was running, and the cooldown's own stops

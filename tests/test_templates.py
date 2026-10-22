@@ -425,6 +425,19 @@ class Templates(unittest.TestCase):
                 refused = [c for c in self.messages(p) if 'filament_table in _COOLDOWN_MATERIALS must be a table' in c]
                 self.assertEqual(len(refused), 1)
 
+    def test_cooldown_select_during_a_run_leaves_the_running_profile_alone(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('COOLDOWN_SELECT', MATERIAL='PLA')
+        self.assertEqual(p.state[VARS].cooldown_profile, 'HOLD_60M_COOL_EX')
+        self.assertEqual(sum('A cooldown is running' in c for c in self.messages(p)), 1)
+        p.run('COOLDOWN_STATUS')
+        self.assertIn('Profile: HOLD_60M_COOL_EX', p.commands[-1])
+        p.run('COOLDOWN_RESET')
+        p.run('COOLDOWN_SELECT', MATERIAL='PLA')
+        self.assertEqual(p.state[VARS].cooldown_profile, 'IMMEDIATE_EX')
+        self.assertEqual(sum('A cooldown is running' in c for c in self.messages(p)), 1)
+
     def test_cooldown_select_accepts_a_profile_in_any_case(self):
         p = Printer()
         p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['XX'] = 'hold_60m_cool_ex'

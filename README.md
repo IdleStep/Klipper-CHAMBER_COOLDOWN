@@ -46,7 +46,7 @@ variable_chamber_cooled_temp: 35
 
 | Command | Behavior |
 |---|---|
-| `COOLDOWN_SELECT MATERIAL=ASA` | Picks the profile mapped to the material; unknown materials get the table's `DEFAULT` (PASSIVE_ONLY) and a message. A blank material is `DEFAULT` without one. |
+| `COOLDOWN_SELECT MATERIAL=ASA` | Picks the profile mapped to the material; unknown materials get the table's `DEFAULT` (PASSIVE_ONLY) and a message. A blank material is `DEFAULT` without one. While a cooldown is running it only prints a message, so the running profile and `COOLDOWN_STATUS` stay correct. |
 | `START_COOLDOWN` | Starts the selected profile (PASSIVE_ONLY when none was selected). `PROFILE=NAME` overrides the selection and may be typed in any case. An unknown profile reports the known profile names, and an invalid one reports what is wrong with it; neither starts. |
 | `COOLDOWN_STATUS` | Shows profile, phase number and name, and time in the phase. |
 | `COOLDOWN_RESET` | Stops the cooldown, clears the selection and restores an idle timeout the cooldown raised. Heaters and fans are left as they are. |
@@ -130,6 +130,7 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `Unknown material ASAA, using the DEFAULT profile PASSIVE_ONLY` | COOLDOWN_SELECT did not find the material in the table and selected the table's `DEFAULT`. |
 | `Material ASA maps to profile NAME, which is not in the profile table. Profile not changed.` | COOLDOWN_SELECT found a profile name in the material table that has no entry in the profile table (a typo in a local override), and left the selection as it was. |
 | `filament_table in _COOLDOWN_MATERIALS must be a table of material names and profile names. Profile not changed.` | A local override replaced the material table with something that is not a table. |
+| `A cooldown is running, so the material was not selected. Run COOLDOWN_RESET first to change it.` | COOLDOWN_SELECT was called while a cooldown was running and changed nothing. |
 | `Cooldown phase N/5 NAME: ...` | A phase started. `skipped` means the profile does not use it. |
 | `Cooldown HOLD: 2.0 of 60.0 min`, `Cooldown RAMP: ...`, `Cooldown REST: ...`, `Cooldown CHILL: ...` | Phase progress, every 2 minutes. |
 | `Hold complete`, `Ramp target reached`, `Rest complete` | A phase finished. |
