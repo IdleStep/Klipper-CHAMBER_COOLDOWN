@@ -39,7 +39,7 @@ class Templates(unittest.TestCase):
         for name in COOLDOWN_MODULES:
             p.load(ROOT / (name + '.cfg'))
         p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
-        for i in range(5):
+        for _ in range(5):
             p.run('_COOLDOWN_LOOP')
         self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].phase, 5)
         self.assertEqual(p.state['fan_generic exhaust_fan'].speed, 1)
@@ -67,7 +67,7 @@ class Templates(unittest.TestCase):
             with self.subTest(profile=profile):
                 p = Printer()
                 p.run('START_COOLDOWN', PROFILE=profile)
-                for i in range(2400):
+                for _ in range(2400):
                     p.run('_COOLDOWN_LOOP')
                     if p.state['gcode_macro _COOLDOWN_VARS'].phase == 5:
                         break
@@ -92,7 +92,7 @@ class Templates(unittest.TestCase):
         p.state['gcode_macro _HARDWARE_VARS'].chamber_heater = ''
         p.state['gcode_macro _HARDWARE_VARS'].chamber_sensor = 'temperature_sensor enclosure'
         p.run('START_COOLDOWN', PROFILE='PASSIVE_ONLY')
-        for i in range(8):
+        for _ in range(8):
             p.run('_COOLDOWN_LOOP')
         self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].phase, 5)
 
@@ -107,13 +107,13 @@ class Templates(unittest.TestCase):
             hw[role] = new.split(' ', 1)[-1] if role != 'bed_heater' else new
         hw.chamber_sensor = 'heater_generic enclosure'
         p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
-        for i in range(12):
+        for _ in range(12):
             p.run('_COOLDOWN_LOOP')
         self.assertEqual(p.state['fan_generic vent'].speed, 1)
 
     def run_until(self, p, phase, limit=2400):
         trace = []
-        for i in range(limit):
+        for _ in range(limit):
             p.run('_COOLDOWN_LOOP')
             cv = p.state['gcode_macro _COOLDOWN_VARS']
             trace.append((cv.phase, cv.phase_loops, p.state['heater_generic chamber'].target))
