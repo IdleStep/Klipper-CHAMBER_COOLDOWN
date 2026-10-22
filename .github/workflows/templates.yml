@@ -8,7 +8,7 @@ on:
 # config_lint.py, klippy_batch.py). Pinned so a change there cannot break this
 # repository's checks unannounced; bump HARNESS_REF when updating.
 env:
-  HARNESS_REF: 5bc6d7fe6a541e50a8eb1cda8ab3bf71adebeeed
+  HARNESS_REF: 9b132218fa05eeecceb86d93980d2c3557488b4e
 
 jobs:
   templates:
