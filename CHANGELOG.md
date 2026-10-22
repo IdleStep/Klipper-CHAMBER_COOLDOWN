@@ -54,6 +54,8 @@ Requires Hardware Controls 1.0.0 or later.
 - A chamber with only a sensor has no tracked target. Changing
   `chamber_cooled_temp` during the cooldown no longer stops it with `changed by
   hand`.
+- COOLDOWN_SELECT trims whitespace around the material. `MATERIAL=" ASA"`
+  silently selected the DEFAULT profile.
 
 ### Changed
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.

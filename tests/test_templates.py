@@ -451,6 +451,13 @@ class Templates(unittest.TestCase):
         for line in progress:
             self.assertRegex(line, r'chamber target \d+\.\d°C')
 
+    def test_material_name_is_trimmed(self):
+        for material in [' ASA', 'ASA ', '  asa\t']:
+            with self.subTest(material=material):
+                p = Printer()
+                p.run('COOLDOWN_SELECT', MATERIAL=material)
+                self.assertEqual(p.state[VARS].cooldown_profile, 'HOLD_60M_COOL_EX')
+
 
 if __name__ == '__main__':
     unittest.main()
