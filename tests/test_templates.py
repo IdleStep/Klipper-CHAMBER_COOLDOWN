@@ -585,6 +585,47 @@ class Templates(unittest.TestCase):
         p.run('_COOLDOWN_LOOP')  # no 'print_stats' in printer: must not raise
         self.assertEqual(p.state[VARS].phase, 5)
 
+    def test_reset_reports_a_running_cooldown_only(self):
+        p = Printer()
+        p.run('COOLDOWN_RESET')
+        self.assertFalse(any('Cooldown reset' in c for c in p.commands))
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('COOLDOWN_RESET')
+        self.assertEqual(sum('Cooldown reset' in c for c in p.commands), 1)
+
+    def test_engine_stops_do_not_add_a_reset_line(self):
+        def changed_by_hand(p):
+            p.state[CHAMBER].target = 50.
+
+        def invalid_value(p):
+            p.state[VARS].hold_loops = 'abc'
+
+        def unreadable_sensor(p):
+            p.state[CHAMBER].pop('temperature')
+
+        def printing(p):
+            p.state['print_stats'] = wrap({'state': 'printing'})
+
+        for stop, change in [('changed by hand', changed_by_hand), ('not valid', invalid_value),
+                             ('cannot be read', unreadable_sensor), ('started printing', printing)]:
+            with self.subTest(stop=stop):
+                p = Printer()
+                p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+                change(p)
+                p.run('_COOLDOWN_LOOP')
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertTrue(any(stop in c for c in p.commands))
+                self.assertFalse(any('Cooldown reset' in c for c in p.commands))
+
+    def test_completion_does_not_add_a_reset_line(self):
+        p = Printer()
+        p.state[CHAMBER].update(target=30., temperature=30.)
+        p.state['heater_bed'].temperature = 30.
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('_COOLDOWN_LOOP')
+        self.assertTrue(any('Cooldown complete' in c for c in p.commands))
+        self.assertFalse(any('Cooldown reset' in c for c in p.commands))
+
 
 if __name__ == '__main__':
     unittest.main()

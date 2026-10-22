@@ -144,6 +144,7 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `Cooldown stopped: the chamber or bed temperature cannot be read` | A tick found a reading that is not a number, and reset the cooldown. |
 | `Cooldown stopped: a value in _COOLDOWN_VARS is not valid` | A tick found a state value that is not a number, or a phase outside 1-5, and reset the cooldown. Something wrote to `_COOLDOWN_VARS` directly. |
 | `Cooldown complete` | Heater and controlled fans are off. |
+| `Cooldown reset` | COOLDOWN_RESET stopped a running cooldown, for example from PRINT_START or the idle timeout. Nothing is printed when no cooldown was running, and the cooldown's own stops print only their own message. |
 
 ## Updates and rollback
 

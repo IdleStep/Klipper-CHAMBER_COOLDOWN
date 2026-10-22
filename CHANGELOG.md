@@ -82,6 +82,10 @@ Requires Hardware Controls 1.0.0 or later.
   after a move, dwell or homing, so a `G4 P30000` or a `G28` during the chill
   phase could stop the cooldown as if a print had started. The message is
   unchanged, and a printer without `print_stats` has no check.
+- COOLDOWN_RESET prints `Cooldown reset` when it stops a running cooldown. The
+  idle timeout or a print macro could end a cooldown without any message.
+  Nothing is printed when no cooldown was running, and the cooldown's own stops
+  and completion pass `QUIET=1`, so they still print one line.
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.
 - A phase the profile does not use still prints its numbered banner, marked
   skipped (`Cooldown phase 2/5 RAMP: skipped, profile has no ramp`), instead of
