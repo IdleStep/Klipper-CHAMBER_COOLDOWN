@@ -1,17 +1,18 @@
 # Klipper CHAMBER_COOLDOWN
 
-Material-selected five-phase cooldown: **hold → ramp → passive rest → exhaust →
-final cooling**. This repository owns the engine, six profiles and material map.
-It has no dependency on Klipper-Configs.
+Material-selected five-phase chamber cooldown for Klipper and Kalico:
+**hold → ramp → rest → exhaust → chill**. This repository owns the engine, six
+profiles and the material map. It has no dependency on Klipper-Configs.
 
-## Installation
+Cooldown API: **version 1**. See the [changelog](CHANGELOG.md) and
+[known issues and design decisions](docs/KNOWN_ISSUES.md).
+
+## Install
 
 Requires [Klipper-Hardware-Controls](https://github.com/IdleStep/Klipper-Hardware-Controls)
-API 1 (settings, fan and chamber modules), standard Klipper macros and `[respond]`.
-Printer hardware definitions stay in your own configuration. Turbo's Kalico is
-the initial deployment target. Read the [known issues](docs/KNOWN_ISSUES.md).
-
-Clone both repositories under `~/printer_data/config`, then include:
+API 1 (its settings, fans and chamber modules) and `[respond]`. Device
+definitions stay in your printer configuration. Clone both repositories under
+`~/printer_data/config`, then include each module once:
 
 ```ini
 [include Klipper-Hardware-Controls/settings.cfg]
@@ -22,57 +23,90 @@ Clone both repositories under `~/printer_data/config`, then include:
 [include cooldown-local.cfg]
 ```
 
-For the full control bundle, use Hardware Controls' `hardware.cfg` instead of the
-three individual files. Include each module once. Copy local examples outside
-checkouts; load overrides after defaults. Cooldown uses mapped device names in
-`_HARDWARE_VARS`. For sensor-only chambers, set `chamber_heater` to `""` and
-`chamber_sensor` to the full temperature-sensor object name.
+Hardware Controls' `hardware.cfg` can replace its three individual modules.
+Local override files live outside both checkouts and load after the defaults.
 
-## Public commands
+## Configuration
 
-```gcode
-COOLDOWN_SELECT MATERIAL=ASA
-START_COOLDOWN
-COOLDOWN_STATUS
-COOLDOWN_RESET
-# Explicit override:
-START_COOLDOWN PROFILE=HOLD_60M_COOL_EX
+Cooldown finds devices through Hardware Controls' `_HARDWARE_VARS`
+(`chamber_heater`, `chamber_sensor`, `bed_heater`, `exhaust_fan`, `bed_fans`,
+`external_pc`). For a chamber with only a sensor, set `chamber_heater` to `""` and
+`chamber_sensor` to the full object name, for example
+`"temperature_sensor chamber"`; hold and ramp are then skipped.
+
+The one user setting is the completion temperature, in
+[`examples/cooldown-local.cfg`](examples/cooldown-local.cfg):
+
+```ini
+[gcode_macro _COOLDOWN_VARS]
+variable_chamber_cooled_temp: 35
 ```
 
-Unknown material selects the material table's DEFAULT (PASSIVE_ONLY). An unknown
-or invalid explicit profile reports an error without scheduling a new run. Reset
-clears selection, stops the timer and restores an idle timeout the cooldown
-extended; it does not shut down heaters or fans. Select material after resetting
-for a new job. Runtime state is not persisted across restarts.
+## Commands
+
+| Command | Behavior |
+|---|---|
+| `COOLDOWN_SELECT MATERIAL=ASA` | Picks the profile mapped to the material; unknown materials get the table's `DEFAULT` (PASSIVE_ONLY). |
+| `START_COOLDOWN` | Starts the selected profile (PASSIVE_ONLY when none was selected). `PROFILE=NAME` overrides the selection. Unknown or invalid profiles report an error and do not start. |
+| `COOLDOWN_STATUS` | Shows profile, phase number and name, and time in the phase. |
+| `COOLDOWN_RESET` | Stops the cooldown, clears the selection and restores an idle timeout the cooldown raised. Heaters and fans are left as they are. |
+
+Select the material again after a reset. Runtime state is not kept across
+restarts.
+
+## How a cooldown runs
+
+The loop runs every 5 seconds. Each tick either stops the cooldown, moves to
+the next phase, or advances the current one.
+
+| Phase | What happens | Ends when |
+|---|---|---|
+| 1 HOLD | Chamber heater keeps its print target. | Hold time passes. Skipped when the profile has no hold. Without a chamber heater, or when the target is already below the ramp target, the cooldown goes straight to phase 3. |
+| 2 RAMP | Target drops `cooldown_ramp_step_c` every `cooldown_ramp_step_seconds`, never below the ramp target. | Target reaches the ramp target. Skipped when the profile has none. |
+| 3 REST | Chamber heater off; exhaust off if the rest is longer than 0. | Rest time passes. Skipped when the profile has no rest. |
+| 4 EXHAUST | Exhaust, external_pc and bed fans set to the profile speed (0 when `exhaust_enable` is False). | On the next tick. |
+| 5 CHILL | Waits; fans keep running. | Chamber and bed at or below `chamber_cooled_temp`. |
+
+Every phase prints a numbered banner, so a cooldown always counts from 1/5 to
+5/5. A phase the profile does not use says `skipped`.
+
+At any phase, the cooldown **completes** (chamber heater and controlled fans off)
+once chamber and bed are at or below `chamber_cooled_temp`. It **stops** without
+touching heaters or fans if you change the chamber target, bed target, exhaust
+or bed fan speed by hand, or a print starts.
+
+When hold, ramp and rest would outlast `[idle_timeout]`, START_COOLDOWN raises
+the timeout for those phases and restores the configured value when the heater
+is released. The normal idle timeout still limits the exhaust and chill phases.
 
 ## Profiles
 
-| Profile | Hold | Ramp target | Rest | Exhaust |
-|---|---:|---:|---:|---:|
-| HOLD_120M_COOL_NO_EX | 120 min | 42°C | 0 | 0% |
-| HOLD_60M_COOL_EX | 60 min | 42°C | 0 | 100% |
-| HOLD_30M_COOL_EX | 30 min | 42°C | 0 | 100% |
-| PASSIVE_ONLY | 0 | skipped | 0 | 0% |
-| REST_5M_THEN_EX | 0 | skipped | 5 min | 100% |
-| IMMEDIATE_EX | 0 | skipped | 0 | 100% |
+| Profile | Hold | Ramp target | Rest | Exhaust | Materials |
+|---|---:|---:|---:|---:|---|
+| HOLD_120M_COOL_NO_EX | 120 min | 42°C | 0 | 0% | PA, PA6, PA6CF, PACF |
+| HOLD_60M_COOL_EX | 60 min | 42°C | 0 | 100% | ABS, ABSCF, ASA, ASACF, ASAGF, PA12 |
+| HOLD_30M_COOL_EX | 30 min | 42°C | 0 | 100% | none (use `PROFILE=`) |
+| PASSIVE_ONLY | 0 | none | 0 | 0% | DEFAULT, PC, PCABS, PCABSCF, PCCF, PCTG, PETG, PETGCF, HIPS |
+| REST_5M_THEN_EX | 0 | none | 5 min | 100% | TPU72D, TPU90A, TPU95A |
+| IMMEDIATE_EX | 0 | none | 0 | 100% | PLA, PLA+, PLACF |
 
-Hold/ramp profiles reduce target 1°C every 120 seconds, never below the ramp
-target. The loop runs every five seconds. The chamber heater is switched off on
-entering phase 3, whichever phases were skipped, and exhaust is switched off for a
-passive rest. When hold, ramp and rest would outlast `[idle_timeout]`, the timeout
-is raised for those phases and restored when the heater is released. Completion
-requires chamber and bed readings at or below 35°C by default, then turns off the
-chamber heater and all fans configured through Hardware Controls. Profiles with a
-ramp need a step above 0°C and at least 5 seconds; exhaust speed must be 0.0 to
-1.0. The material map keeps Turbo's effective behavior, including HIPS/PCTG
-falling back to PASSIVE_ONLY.
+Ramping profiles step 1°C every 120 seconds. Field meanings and limits are
+documented at the top of [`profiles.cfg`](profiles.cfg); START_COOLDOWN refuses a
+ramp step at or below 0°C, a step time under 5 seconds, negative times, or an
+exhaust speed outside 0.0 to 1.0. The material map keeps Turbo's effective
+behavior, including HIPS and PCTG falling back to PASSIVE_ONLY.
 
-## Integration and updates
+## Integrating with print macros
 
-Merge guarded calls into existing macros: COOLDOWN_RESET during startup before
-material selection; COOLDOWN_SELECT MATERIAL={material} during material handling;
-START_COOLDOWN after normal print end/cancel actions; COOLDOWN_RESET in idle/UI
-shutdown. Do not replace whole print macros or write runtime variables directly.
+Add guarded calls to existing macros rather than replacing them, and never write
+`_COOLDOWN_VARS` directly:
+
+| Where | Call |
+|---|---|
+| Print start, before material selection | `COOLDOWN_RESET` |
+| Material handling | `COOLDOWN_SELECT MATERIAL={material}` |
+| After print end and cancel actions | `START_COOLDOWN` |
+| Idle timeout and UI shutdown or preheat | `COOLDOWN_RESET` |
 
 ```jinja
 {% if 'gcode_macro START_COOLDOWN' in printer %}
@@ -80,15 +114,46 @@ shutdown. Do not replace whole print macros or write runtime variables directly.
 {% endif %}
 ```
 
-See [migration and rollback](docs/MIGRATION.md) and
-[Moonraker updater example](examples/moonraker.conf). Keep overrides outside
-checkouts and update while inactive. Initial compatibility: cooldown API 1 with
-Hardware Controls API 1; record exact tested revisions per printer.
+## Messages
+
+| Message | Meaning |
+|---|---|
+| `Cooldown started with profile: NAME` | START_COOLDOWN accepted the profile. |
+| `Cooldown phase N/5 NAME: ...` | A phase started. `skipped` means the profile does not use it. |
+| `Cooldown HOLD: 2.0 of 60.0 min`, `Cooldown RAMP: ...`, `Cooldown REST: ...`, `Cooldown CHILL: ...` | Phase progress, every 2 minutes. |
+| `Hold complete`, `Ramp target reached`, `Rest complete` | A phase finished. |
+| `No chamber heater, skipping hold and ramp`, `Chamber target ... is below the ramp target ..., skipping hold and ramp` | The cooldown goes from phase 1 straight to phase 3. |
+| `No exhaust or external_pc fan configured, skipping exhaust` | Phase 4 found no fan to set. |
+| `Chamber → 041.0/042.0 • Bed → 034.0/035.0 • Cycle 005` | Temperatures at the start of each phase and every 25 s: reading / displayed target. The displayed target is the heater target or `chamber_cooled_temp`, whichever is higher. Arrows compare the reading with it: above (↑), within 2°C below (→), further below (↓). |
+| `Cooldown stopped: chamber, bed or fan settings were changed by hand` | A tracked target or fan speed changed outside the cooldown. |
+| `Cooldown stopped: the printer started printing` | A new print began. |
+| `Unknown cooldown profile` / `Invalid cooldown profile` | Nothing was started; check the name or profile values. |
+| `Cooldown complete` | Heater and controlled fans are off. |
+
+## Updates and rollback
+
+Add [`examples/moonraker.conf`](examples/moonraker.conf) to `moonraker.conf`. It
+follows tagged releases (`channel: stable`); use `channel: dev` to follow `main`.
+Update while the printer is idle, keep overrides outside the checkout and record
+the tested revisions of both repositories per printer. Cooldown API 1 works with
+Hardware Controls API 1 from 1.0.0 on. Migration from the Klipper-Configs
+cooldown is in [docs/MIGRATION.md](docs/MIGRATION.md).
 
 ## Tests
 
-Clone Hardware Controls into `hardware-controls` beside this README for testing,
-install `requirements-test.txt`, then run `python -m unittest discover -s tests -v`.
-Tests render templates and simulate commands without contacting hardware. They
-cover all profiles, mapped devices, optional fans, fallback, reset and completion;
-they do not replace full firmware or thermal validation.
+Check out Hardware Controls as `hardware-controls` beside this README (it
+provides the shared test harness), then:
+
+```sh
+pip install -r requirements-test.txt
+python -m unittest discover -s tests -v
+```
+
+- `tests/test_templates.py` simulates every profile and phase path.
+- `tests/test_config_lint.py` checks the config files.
+- `tests/test_klippy.py` runs `tests/klippy/*.gcode` in real Klipper and Kalico
+  without hardware; it is skipped unless `KLIPPER_DIR`, `KLIPPY_DICT` and
+  `KLIPPY_PYTHON` are set (see the CI workflow).
+
+CI also runs the suite against Hardware Controls 1.0.0. None of this replaces a
+real thermal run on the printer.
