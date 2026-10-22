@@ -37,6 +37,10 @@ Requires Hardware Controls 1.0.0 or later.
   or external_pc fan configured, skipping exhaust` and its bed fans were never
   set; the message now reads `No exhaust, external_pc or bed_fans fan
   configured, skipping exhaust` and appears only when none of the three exists.
+- `exhaust_enable` in a profile must be `True` or `False` (`1` and `0` and a
+  missing key work as before). Text such as `"False"` counted as true, so the
+  fans ran at full speed; text and `None` are now refused with `exhaust_enable
+  must be True or False`.
 
 ### Changed
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.

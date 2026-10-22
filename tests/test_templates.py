@@ -125,7 +125,10 @@ class Templates(unittest.TestCase):
 
     def custom_profile(self, p, **changes):
         table = p.state['gcode_macro _COOLDOWN_PROFILES'].profiles
-        table['CUSTOM'] = wrap(dict(table['HOLD_60M_COOL_EX'], **changes))
+        profile = dict(table['HOLD_60M_COOL_EX'], **changes)
+        for key in [key for key, value in changes.items() if value is Ellipsis]:
+            del profile[key]  # Ellipsis removes the key
+        table['CUSTOM'] = wrap(profile)
 
     def messages(self, p):
         return [c for c in p.commands if c.startswith('RESPOND')]
@@ -370,6 +373,24 @@ class Templates(unittest.TestCase):
         p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
         self.run_until(p, 5)
         self.assertTrue(any('skipping exhaust' in c for c in p.commands))
+
+    def test_exhaust_enable_text_is_refused(self):
+        for value in ['False', 'no', '0', 'false', None]:
+            with self.subTest(value=value):
+                p = Printer()
+                self.custom_profile(p, chamber_hold_minutes=0, chamber_target_temp=0, exhaust_enable=value)
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertTrue(any('exhaust_enable must be True or False' in c for c in self.messages(p)))
+
+    def test_exhaust_enable_booleans_and_zero_one_still_work(self):
+        for value, speed in [(True, 1.0), (False, 0.0), (1, 1.0), (0, 0.0), (Ellipsis, 1.0)]:
+            with self.subTest(value=value):
+                p = Printer()
+                self.custom_profile(p, chamber_hold_minutes=0, chamber_target_temp=0, exhaust_enable=value)
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.assertEqual(p.state[VARS].phase, 1)
+                self.assertEqual(p.state[VARS].exhaust_fan_speed, speed)
 
 
 if __name__ == '__main__':
