@@ -97,6 +97,9 @@ Requires Hardware Controls 1.0.0 or later.
   profile table (`Material ASA maps to profile NAME, which is not in the profile
   table. Profile not changed.`). A bad local override used to be selected and
   failed at START_COOLDOWN, after the print.
+- COOLDOWN_SELECT reports a material table that is not a table (a list, text or
+  nothing) and leaves the selection alone. It used to raise `Error evaluating`,
+  which aborted the macro that called it, and so the print start.
 - COOLDOWN_RESET prints `Cooldown reset` when it stops a running cooldown. The
   idle timeout or a print macro could end a cooldown without any message.
   Nothing is printed when no cooldown was running, and the cooldown's own stops

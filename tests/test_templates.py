@@ -414,6 +414,17 @@ class Templates(unittest.TestCase):
                 self.assertEqual(len(refused), 1)
                 self.assertIn('Profile not changed', refused[0])
 
+    def test_cooldown_select_refuses_a_material_table_that_is_not_a_table(self):
+        for broken in [['ASA', 'HOLD_60M_COOL_EX'], 'ASA', None, 5]:
+            with self.subTest(table=broken):
+                p = Printer()
+                p.run('COOLDOWN_SELECT', MATERIAL='PLA')
+                p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table = broken
+                p.run('COOLDOWN_SELECT', MATERIAL='ASA')  # must not raise
+                self.assertEqual(p.state[VARS].cooldown_profile, 'IMMEDIATE_EX')  # unchanged
+                refused = [c for c in self.messages(p) if 'filament_table in _COOLDOWN_MATERIALS must be a table' in c]
+                self.assertEqual(len(refused), 1)
+
     def test_cooldown_select_accepts_a_profile_in_any_case(self):
         p = Printer()
         p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['XX'] = 'hold_60m_cool_ex'
