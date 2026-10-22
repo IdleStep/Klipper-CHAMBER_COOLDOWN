@@ -33,6 +33,10 @@ Requires Hardware Controls 1.0.0 or later.
   start target below the ramp target). The cooldown used to print 1/5, 3/5, 4/5
   and 5/5 on those paths; it now says `Cooldown phase 2/5 RAMP: skipped, no hold
   or ramp to run`.
+- Phase 4 counts `bed_fans`. A printer with only bed fans was told `No exhaust
+  or external_pc fan configured, skipping exhaust` and its bed fans were never
+  set; the message now reads `No exhaust, external_pc or bed_fans fan
+  configured, skipping exhaust` and appears only when none of the three exists.
 
 ### Changed
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.

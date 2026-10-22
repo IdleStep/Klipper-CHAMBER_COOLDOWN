@@ -353,6 +353,24 @@ class Templates(unittest.TestCase):
         self.run_until(p, 5)
         self.assertEqual(self.banner_numbers(p), ['1/5', '2/5', '3/5', '4/5', '5/5'])
 
+    def test_bed_fans_only_printer_gets_its_fans(self):
+        p = Printer()
+        p.state.pop('fan_generic exhaust_fan')
+        p.state.pop('fan_generic external_pc')
+        p.state['fan_generic bed_fans'] = wrap({'speed': 0.})
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.run_until(p, 5)
+        self.assertEqual(p.state['fan_generic bed_fans'].speed, 1)
+        self.assertFalse(any('skipping exhaust' in c for c in p.commands))
+
+    def test_no_fans_at_all_still_skips_with_a_message(self):
+        p = Printer()
+        p.state.pop('fan_generic exhaust_fan')
+        p.state.pop('fan_generic external_pc')
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.run_until(p, 5)
+        self.assertTrue(any('skipping exhaust' in c for c in p.commands))
+
 
 if __name__ == '__main__':
     unittest.main()

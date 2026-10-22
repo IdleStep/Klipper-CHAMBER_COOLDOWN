@@ -123,7 +123,7 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `Cooldown HOLD: 2.0 of 60.0 min`, `Cooldown RAMP: ...`, `Cooldown REST: ...`, `Cooldown CHILL: ...` | Phase progress, every 2 minutes. |
 | `Hold complete`, `Ramp target reached`, `Rest complete` | A phase finished. |
 | `No chamber heater, skipping hold and ramp`, `Chamber target ... is below the ramp target ..., skipping hold and ramp` | The cooldown goes from phase 1 straight to phase 3. Banner 2/5 still prints, as `RAMP: skipped, no hold or ramp to run`. |
-| `No exhaust or external_pc fan configured, skipping exhaust` | Phase 4 found no fan to set. |
+| `No exhaust, external_pc or bed_fans fan configured, skipping exhaust` | Phase 4 found none of the three fans to set. |
 | `Chamber → 041.0/042.0 • Bed → 034.0/035.0 • Cycle 005` | Temperatures at the start of each phase and every 25 s: reading / displayed target. The displayed target is the heater target or `chamber_cooled_temp`, whichever is higher. Arrows compare the reading with it: above (↑), within 2°C below (→), further below (↓). |
 | `Cooldown stopped: chamber, bed or fan settings were changed by hand` | A tracked target or fan speed changed outside the cooldown. |
 | `Cooldown stopped: the printer started printing` | A new print began. |
