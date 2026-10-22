@@ -1,4 +1,4 @@
-# Klipper CHAMBER_COOLDOWN
+# Klipper Chamber Cooldown
 
 Material-selected five-phase chamber cooldown for Klipper and Kalico:
 **hold → ramp → rest → exhaust → chill**. This repository owns the engine, six
@@ -19,7 +19,7 @@ definitions stay in your printer configuration. Clone both repositories under
 [include Klipper-Hardware-Controls/fans.cfg]
 [include Klipper-Hardware-Controls/chamber.cfg]
 [include hardware-local.cfg]
-[include Klipper-CHAMBER_COOLDOWN/cooldown.cfg]
+[include Klipper-Chamber-Cooldown/cooldown.cfg]
 [include cooldown-local.cfg]
 ```
 

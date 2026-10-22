@@ -18,7 +18,7 @@ SCRIPTS = pathlib.Path(__file__).resolve().parent / 'klippy'
 def printer_cfg():
     return '\n'.join([
         (SUPPORT_DIR / 'printer.cfg').read_text(encoding='utf-8'),
-        '[include Klipper-CHAMBER_COOLDOWN/cooldown.cfg]',
+        '[include Klipper-Chamber-Cooldown/cooldown.cfg]',
         '',
         delayed_gcode_as_macro(test_templates.ROOT / 'engine.cfg', '_COOLDOWN_LOOP', 'TEST_COOLDOWN_TICK'),
     ])
@@ -28,7 +28,7 @@ class RealKlipper(unittest.TestCase):
     def test_scripts(self):
         run_script_files(self, SCRIPTS, printer_cfg(), {
             'Klipper-Hardware-Controls': HW_ROOT,
-            'Klipper-CHAMBER_COOLDOWN': test_templates.ROOT,
+            'Klipper-Chamber-Cooldown': test_templates.ROOT,
         })
 
 

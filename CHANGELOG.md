@@ -34,6 +34,12 @@ Requires Hardware Controls 1.0.0 or later.
   local file that overrides the profile table must use the new name.
 - COOLDOWN_SELECT falls back to the material table's `DEFAULT`.
 - Moonraker example follows tagged releases.
+- The repository is renamed Klipper-Chamber-Cooldown (was
+  Klipper-CHAMBER_COOLDOWN). Clone it into
+  `~/printer_data/config/Klipper-Chamber-Cooldown` and include
+  `Klipper-Chamber-Cooldown/cooldown.cfg`. GitHub redirects the old URL.
+- The Moonraker example names its section after the repository:
+  `[update_manager Klipper-Chamber-Cooldown]`.
 - Code, comments, tests, README and docs tidied, with no behavior change.
 - Tests use Hardware Controls' shared harness, lint the configs, run in real
   Klipper and Kalico, and run against Hardware Controls 1.0.0.

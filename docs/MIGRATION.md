@@ -10,7 +10,7 @@ d8864740a9201492b0fb6dbfc61bc080c5fb13af.
 1. Install Hardware Controls first.
 2. Remove the old helper includes before adding the Hardware Controls ones.
    Never load both: the macros would be defined twice.
-3. Replace the old cooldown include with `Klipper-CHAMBER_COOLDOWN/cooldown.cfg`.
+3. Replace the old cooldown include with `Klipper-Chamber-Cooldown/cooldown.cfg`.
 4. Keep local overrides outside both checkouts.
 5. Back up the root config files, the integration files you change, the saved
    state and the installed revisions, then restart while the printer is idle.
