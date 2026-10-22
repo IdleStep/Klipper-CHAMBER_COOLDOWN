@@ -46,7 +46,7 @@ variable_chamber_cooled_temp: 35
 
 | Command | Behavior |
 |---|---|
-| `COOLDOWN_SELECT MATERIAL=ASA` | Picks the profile mapped to the material; unknown materials get the table's `DEFAULT` (PASSIVE_ONLY). |
+| `COOLDOWN_SELECT MATERIAL=ASA` | Picks the profile mapped to the material; unknown materials get the table's `DEFAULT` (PASSIVE_ONLY) and a message. A blank material is `DEFAULT` without one. |
 | `START_COOLDOWN` | Starts the selected profile (PASSIVE_ONLY when none was selected). `PROFILE=NAME` overrides the selection and may be typed in any case. An unknown profile reports the known profile names, and an invalid one reports what is wrong with it; neither starts. |
 | `COOLDOWN_STATUS` | Shows profile, phase number and name, and time in the phase. |
 | `COOLDOWN_RESET` | Stops the cooldown, clears the selection and restores an idle timeout the cooldown raised. Heaters and fans are left as they are. |
@@ -127,6 +127,7 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `Cooldown started with profile: NAME` | START_COOLDOWN accepted the profile. |
 | `Ramp step of N s runs as M s because the loop ticks every 5 s` | The profile's `cooldown_ramp_step_seconds` is not a multiple of 5; it runs at the nearest multiple. |
 | `exhaust_fan_speed 0.05 is below the fan minimum, so these fans run at their minimum instead: exhaust_fan (0.2)` | The profile's fan speed is under the `min_power` (or `off_below`) of the listed fans, which run at that minimum. |
+| `Unknown material ASAA, using the DEFAULT profile PASSIVE_ONLY` | COOLDOWN_SELECT did not find the material in the table and selected the table's `DEFAULT`. |
 | `Cooldown phase N/5 NAME: ...` | A phase started. `skipped` means the profile does not use it. |
 | `Cooldown HOLD: 2.0 of 60.0 min`, `Cooldown RAMP: ...`, `Cooldown REST: ...`, `Cooldown CHILL: ...` | Phase progress, every 2 minutes. |
 | `Hold complete`, `Ramp target reached`, `Rest complete` | A phase finished. |

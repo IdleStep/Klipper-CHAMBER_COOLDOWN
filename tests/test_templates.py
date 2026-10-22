@@ -382,6 +382,26 @@ class Templates(unittest.TestCase):
         p.run('COOLDOWN_SELECT', MATERIAL='UNOBTAINIUM')
         self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].cooldown_profile, 'IMMEDIATE_EX')
 
+    def test_unknown_material_is_reported_but_known_and_blank_are_not(self):
+        p = Printer()
+        p.run('COOLDOWN_SELECT', MATERIAL='ASAA')
+        notes = [c for c in self.messages(p) if 'Unknown material' in c]
+        self.assertEqual(len(notes), 1)
+        self.assertIn('Unknown material ASAA, using the DEFAULT profile PASSIVE_ONLY', notes[0])
+        self.assertEqual(p.state[VARS].cooldown_profile, 'PASSIVE_ONLY')
+        for material in ['ASA', 'asa', ' ASA ', 'DEFAULT', '', '  ', None]:
+            with self.subTest(material=material):
+                p = Printer()
+                p.run('COOLDOWN_SELECT', **({} if material is None else {'MATERIAL': material}))
+                self.assertFalse(any('Unknown material' in c for c in self.messages(p)))
+
+    def test_unknown_material_with_a_quote_does_not_break_the_message(self):
+        p = Printer()
+        p.run('COOLDOWN_SELECT', MATERIAL='A"B')  # must not raise
+        notes = [c for c in self.messages(p) if 'Unknown material' in c]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("Unknown material A'B,", notes[0])
+
     def test_non_numeric_chamber_cooled_temp_is_refused_at_start(self):
         for value in ['35', None, [35]]:
             with self.subTest(value=value):

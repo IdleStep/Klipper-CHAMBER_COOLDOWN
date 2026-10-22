@@ -90,6 +90,9 @@ Requires Hardware Controls 1.0.0 or later.
   0.05 is below the fan minimum, so these fans run at their minimum instead:
   exhaust_fan (0.2)`. Mainline Klipper treats a speed under `off_below` as off. The
   shipped profiles use 0.0 and 1.0 and are unaffected.
+- COOLDOWN_SELECT says `Unknown material ASAA, using the DEFAULT profile
+  PASSIVE_ONLY` when the material is not in the table. A typo used to select
+  DEFAULT without a word. A blank `MATERIAL=` still selects DEFAULT silently.
 - COOLDOWN_RESET prints `Cooldown reset` when it stops a running cooldown. The
   idle timeout or a print macro could end a cooldown without any message.
   Nothing is printed when no cooldown was running, and the cooldown's own stops
