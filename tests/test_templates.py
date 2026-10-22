@@ -261,6 +261,7 @@ class Templates(unittest.TestCase):
         p.run('START_COOLDOWN', PROFILE='CUSTOM')
         message = [c for c in p.commands if 'Invalid cooldown profile CUSTOM' in c][0]
         self.assertNotIn(';', message)
+        self.assertIn('Invalid cooldown profile CUSTOM: ', message)
         self.assertIn('0 or more, exhaust_fan_speed must be', message)
         self.assertTrue(message.endswith('Cooldown not started."'))
 
