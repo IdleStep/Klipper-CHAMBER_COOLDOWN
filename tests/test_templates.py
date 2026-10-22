@@ -118,7 +118,7 @@ class Templates(unittest.TestCase):
         for _ in range(limit):
             p.run('_COOLDOWN_LOOP')
             cv = p.state['gcode_macro _COOLDOWN_VARS']
-            trace.append((cv.phase, cv.phase_loops, p.state['heater_generic chamber'].target))
+            trace.append((cv.phase, cv.phase_loops, p.state[CHAMBER].target if CHAMBER in p.state else 0))
             if cv.phase in (0, phase):
                 break
         return trace
@@ -129,6 +129,18 @@ class Templates(unittest.TestCase):
 
     def messages(self, p):
         return [c for c in p.commands if c.startswith('RESPOND')]
+
+    def banner_numbers(self, p):
+        return [c.split('MSG="Cooldown phase ')[1][:3] for c in p.commands if 'Cooldown phase' in c]
+
+    def sensor_printer(self, **reading):
+        """A printer whose chamber has only a temperature sensor."""
+        p = Printer()
+        p.state.pop(CHAMBER)
+        p.state['temperature_sensor enclosure'] = wrap(reading)
+        p.state['gcode_macro _HARDWARE_VARS'].chamber_heater = ''
+        p.state['gcode_macro _HARDWARE_VARS'].chamber_sensor = 'temperature_sensor enclosure'
+        return p
 
     def test_heater_released_for_every_profile_and_start_target(self):
         for start in [55., 30., 0.]:
@@ -326,6 +338,20 @@ class Templates(unittest.TestCase):
                 self.assertEqual(p.delays['_COOLDOWN_LOOP'], 0)
                 self.assertEqual(p.idle_timeout, 4800)
                 self.assertTrue(any('not valid' in c for c in self.messages(p)))
+
+    def test_skipped_hold_and_ramp_still_count_to_five(self):
+        p = Printer()
+        p.state[CHAMBER].target = 30.
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        self.run_until(p, 5)
+        self.assertEqual(self.banner_numbers(p), ['1/5', '2/5', '3/5', '4/5', '5/5'])
+        self.assertTrue(any('RAMP: skipped' in c for c in p.commands))
+
+    def test_no_heater_still_counts_to_five(self):
+        p = self.sensor_printer(temperature=50.)
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        self.run_until(p, 5)
+        self.assertEqual(self.banner_numbers(p), ['1/5', '2/5', '3/5', '4/5', '5/5'])
 
 
 if __name__ == '__main__':

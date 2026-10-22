@@ -29,6 +29,10 @@ Requires Hardware Controls 1.0.0 or later.
   until the idle timeout. A tick that finds a non-numeric state value or a phase
   outside 1-5 now stops the cooldown with `Cooldown stopped: a value in
   _COOLDOWN_VARS is not valid`.
+- Banner 2/5 is printed when hold and ramp are skipped (no chamber heater, or a
+  start target below the ramp target). The cooldown used to print 1/5, 3/5, 4/5
+  and 5/5 on those paths; it now says `Cooldown phase 2/5 RAMP: skipped, no hold
+  or ramp to run`.
 
 ### Changed
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.
