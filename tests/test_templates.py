@@ -440,6 +440,17 @@ class Templates(unittest.TestCase):
                 p.run('COOLDOWN_STATUS')
                 self.assertIn('Phase: %d ?' % phase, p.commands[-1])
 
+    def test_ramp_progress_line_is_rounded(self):
+        p = Printer()
+        p.state[CHAMBER].target = 45.3
+        self.custom_profile(p, chamber_hold_minutes=0, cooldown_ramp_step_c=0.1, cooldown_ramp_step_seconds=5)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        self.run_until(p, 3)
+        progress = [c for c in p.commands if 'Cooldown RAMP: chamber target' in c]
+        self.assertTrue(progress)
+        for line in progress:
+            self.assertRegex(line, r'chamber target \d+\.\d°C')
+
 
 if __name__ == '__main__':
     unittest.main()
