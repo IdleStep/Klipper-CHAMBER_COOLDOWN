@@ -54,6 +54,11 @@ Requires Hardware Controls 1.0.0 or later.
 - A chamber with only a sensor has no tracked target. Changing
   `chamber_cooled_temp` during the cooldown no longer stops it with `changed by
   hand`.
+- START_COOLDOWN refuses a `chamber_sensor` (when there is no chamber heater) or
+  a `bed_heater` that has no `temperature`, which only happens when
+  `_HARDWARE_VARS` names the wrong object. A tick that finds a reading that is
+  not a number stops the cooldown with `Cooldown stopped: the chamber or bed
+  temperature cannot be read`; the tick used to raise and strand the loop.
 - COOLDOWN_SELECT trims whitespace around the material. `MATERIAL=" ASA"`
   silently selected the DEFAULT profile.
 

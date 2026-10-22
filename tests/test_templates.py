@@ -476,6 +476,35 @@ class Templates(unittest.TestCase):
         self.assertEqual(p.state[VARS].phase, 0)
         self.assertTrue(any("a'b" in c for c in self.messages(p)))
 
+    def test_sensor_without_temperature_is_refused_at_start(self):
+        p = self.sensor_printer()  # an object with no temperature key
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertNotIn('_COOLDOWN_LOOP', p.delays)
+        self.assertTrue(any('chamber_sensor' in c and 'has no temperature' in c for c in self.messages(p)))
+
+    def test_bed_heater_without_temperature_is_refused_at_start(self):
+        p = Printer()
+        p.state['heater_bed'].pop('temperature')
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertTrue(any('bed_heater' in c and 'has no temperature' in c for c in self.messages(p)))
+
+    def test_loop_stops_cleanly_when_a_reading_disappears(self):
+        p = self.sensor_printer(temperature=50.)
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        self.assertEqual(p.state[VARS].phase, 1)
+        p.state['temperature_sensor enclosure'] = wrap({})
+        p.run('_COOLDOWN_LOOP')  # must not raise
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertEqual(p.delays['_COOLDOWN_LOOP'], 0)
+        self.assertTrue(any('cannot be read' in c for c in self.messages(p)))
+
+    def test_a_working_sensor_still_starts(self):
+        p = self.sensor_printer(temperature=50.)
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.assertEqual(p.state[VARS].phase, 1)
+
 
 if __name__ == '__main__':
     unittest.main()

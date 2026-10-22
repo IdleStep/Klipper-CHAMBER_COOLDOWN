@@ -133,6 +133,8 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `Invalid cooldown profile` | Nothing was started; the profile's values are wrong, and the message says which. |
 | `Invalid cooldown profile NAME: chamber_hold_minutes, exhaust_fan_speed must be numbers. Cooldown not started.` | A profile value is missing or is text; the message lists the keys. |
 | `chamber_cooled_temp in _COOLDOWN_VARS must be a number. Cooldown not started.` | The setting is text or empty; nothing was started. Fix it in `cooldown-local.cfg`. |
+| `chamber_sensor in _HARDWARE_VARS has no temperature. Cooldown not started.` (and the same for `bed_heater`) | The named object exists but is not a temperature device, so the name in `_HARDWARE_VARS` is wrong. |
+| `Cooldown stopped: the chamber or bed temperature cannot be read` | A tick found a reading that is not a number, and reset the cooldown. |
 | `Cooldown stopped: a value in _COOLDOWN_VARS is not valid` | A tick found a state value that is not a number, or a phase outside 1-5, and reset the cooldown. Something wrote to `_COOLDOWN_VARS` directly. |
 | `Cooldown complete` | Heater and controlled fans are off. |
 
