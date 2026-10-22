@@ -22,7 +22,6 @@ Requires Hardware Controls 1.0.0 or later.
   the start of a comment, so the message was cut off.
 - Chamber progress arrow works, and the bed arrow compares with the displayed
   bed value (target or `chamber_cooled_temp`), as the chamber arrow does.
-
 - START_COOLDOWN refuses a `chamber_cooled_temp` that is not a number (text,
   empty or a list). It used to start, raise the idle timeout and then raise on
   the first tick, which left the heater at its hold target with the loop dead
