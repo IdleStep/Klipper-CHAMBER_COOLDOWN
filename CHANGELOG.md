@@ -23,6 +23,13 @@ Requires Hardware Controls 1.0.0 or later.
 - Chamber progress arrow works, and the bed arrow compares with the displayed
   bed value (target or `chamber_cooled_temp`), as the chamber arrow does.
 
+- START_COOLDOWN refuses a `chamber_cooled_temp` that is not a number (text,
+  empty or a list). It used to start, raise the idle timeout and then raise on
+  the first tick, which left the heater at its hold target with the loop dead
+  until the idle timeout. A tick that finds a non-numeric state value or a phase
+  outside 1-5 now stops the cooldown with `Cooldown stopped: a value in
+  _COOLDOWN_VARS is not valid`.
+
 ### Changed
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.
 - A phase the profile does not use still prints its numbered banner, marked

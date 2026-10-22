@@ -13,6 +13,7 @@ baseline:
 | `exhaust_enable` was ignored | `exhaust_enable: False` runs phase 4 at speed 0 (a missing key counts as True) |
 | Invalid ramp timing could hold the heater forever; out-of-range exhaust speed stopped the loop mid-run; ramp steps could overshoot | START_COOLDOWN refuses invalid profiles; steps never go below the ramp target |
 | Reporting used an undefined `c` test | Both arrows compare readings with the displayed target |
+| A text or empty `chamber_cooled_temp` was accepted; the first tick then raised, and Klipper does not reschedule a delayed gcode that raises, so the cooldown sat in its phase with the heater on until the idle timeout ended it | START_COOLDOWN refuses a `chamber_cooled_temp` that is not a number; a tick that finds a non-numeric state value or a phase outside 1-5 stops the cooldown with a message |
 
 ## By design
 

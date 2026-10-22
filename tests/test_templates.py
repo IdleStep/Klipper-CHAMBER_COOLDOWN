@@ -19,6 +19,8 @@ from klipper_sim import State, wrap  # noqa: E402,F401  (re-exported for Klipper
 COOLDOWN_MODULES = ['profiles', 'materials', 'engine']
 # What README says cooldown needs from Hardware Controls.
 REQUIRED_HARDWARE_MODULES = ['settings', 'fans', 'chamber']
+VARS = 'gcode_macro _COOLDOWN_VARS'
+CHAMBER = 'heater_generic chamber'
 
 
 class Printer(klipper_sim.Printer):
@@ -124,6 +126,9 @@ class Templates(unittest.TestCase):
     def custom_profile(self, p, **changes):
         table = p.state['gcode_macro _COOLDOWN_PROFILES'].profiles
         table['CUSTOM'] = wrap(dict(table['HOLD_60M_COOL_EX'], **changes))
+
+    def messages(self, p):
+        return [c for c in p.commands if c.startswith('RESPOND')]
 
     def test_heater_released_for_every_profile_and_start_target(self):
         for start in [55., 30., 0.]:
@@ -295,6 +300,32 @@ class Templates(unittest.TestCase):
         p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['DEFAULT'] = 'IMMEDIATE_EX'
         p.run('COOLDOWN_SELECT', MATERIAL='UNOBTAINIUM')
         self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].cooldown_profile, 'IMMEDIATE_EX')
+
+    def test_non_numeric_chamber_cooled_temp_is_refused_at_start(self):
+        for value in ['35', None, [35]]:
+            with self.subTest(value=value):
+                p = Printer()
+                p.state[VARS].chamber_cooled_temp = value
+                p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertFalse(any(c.startswith('SET_IDLE_TIMEOUT') for c in p.commands))
+                self.assertTrue(any('chamber_cooled_temp' in c and 'must be a number' in c
+                                    for c in self.messages(p)))
+
+    def test_loop_stops_cleanly_on_invalid_state(self):
+        cases = [('chamber_cooled_temp', None), ('chamber_cooled_temp', '35'), ('hold_loops', 'abc'),
+                 ('ramp_step_loops', 'abc'), ('cooldown_ramp_step_c', 'abc'), ('ramp_chamber_target_temp', '42'),
+                 ('phase', 7), ('phase', -1), ('phase', 'abc')]
+        for var, value in cases:
+            with self.subTest(var=var, value=value):
+                p = Printer()
+                p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+                p.state[VARS][var] = value
+                p.run('_COOLDOWN_LOOP')  # must not raise
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertEqual(p.delays['_COOLDOWN_LOOP'], 0)
+                self.assertEqual(p.idle_timeout, 4800)
+                self.assertTrue(any('not valid' in c for c in self.messages(p)))
 
 
 if __name__ == '__main__':
