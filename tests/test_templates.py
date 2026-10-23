@@ -26,11 +26,27 @@ CHAMBER = 'heater_generic chamber'
 class Printer(klipper_sim.Printer):
     """Simulated printer with Hardware Controls and, optionally, cooldown loaded."""
 
-    def __init__(self, hardware=True, cooldown=True):
+    def __init__(self, hardware=True, cooldown=True, tracking=False):
         super().__init__(hardware)
         if cooldown:
             for name in COOLDOWN_MODULES:
                 self.load(ROOT / (name + '.cfg'))
+        if tracking:
+            self.load(ROOT / 'idle_timeout_tracking.cfg')
+
+    def execute(self, line):
+        # idle_timeout_tracking.cfg renames the built-in command to this one.
+        if line.split()[0].upper() == 'SET_IDLE_TIMEOUT_BASE':
+            self.commands.append(line)
+            args = dict(token.split('=', 1) for token in line.split()[1:] if '=' in token)
+            try:
+                seconds = float(args['TIMEOUT'])
+            except (KeyError, ValueError):
+                return  # Klipper would report the bad or missing value
+            if seconds > 0:
+                self.idle_timeout = seconds
+            return
+        super().execute(line)
 
 
 class Templates(unittest.TestCase):
@@ -242,6 +258,82 @@ class Templates(unittest.TestCase):
         p.idle_timeout = 43200.
         p.run('COOLDOWN_RESET')
         self.assertEqual(p.idle_timeout, 43200)
+
+    def test_a_timeout_set_by_hand_is_remembered(self):
+        p = Printer(tracking=True)
+        p.run('SET_IDLE_TIMEOUT', TIMEOUT=2000)
+        self.assertEqual(p.idle_timeout, 2000)
+        self.assertEqual(p.state[VARS].user_idle_timeout, 2000)
+
+    def test_cooldown_extends_from_the_timeout_in_force_and_hands_it_back(self):
+        for hand, expected_start in [(2000, 9360), (4800, 9360)]:
+            with self.subTest(hand=hand):
+                p = Printer(tracking=True)
+                p.run('SET_IDLE_TIMEOUT', TIMEOUT=hand)
+                p.run('START_COOLDOWN', PROFILE='HOLD_120M_COOL_NO_EX')
+                self.assertEqual(p.idle_timeout, expected_start)
+                self.assertEqual(p.state[VARS].user_idle_timeout, hand)  # its own change is not recorded
+                self.run_until(p, 3)
+                self.assertEqual(p.idle_timeout, hand)
+                self.assertEqual(p.state[VARS].idle_timeout_extended, 0)
+
+    def test_a_longer_timeout_set_by_hand_is_not_shortened_or_replaced(self):
+        for profile in ['HOLD_120M_COOL_NO_EX', 'REST_5M_THEN_EX']:
+            with self.subTest(profile=profile):
+                p = Printer(tracking=True)
+                p.run('SET_IDLE_TIMEOUT', TIMEOUT=999999)  # DISABLE_TIMEOUT
+                p.run('START_COOLDOWN', PROFILE=profile)
+                self.assertEqual(p.idle_timeout, 999999)
+                self.assertEqual(p.state[VARS].idle_timeout_extended, 0)
+                self.run_until(p, 4)
+                p.run('COOLDOWN_RESET')
+                self.assertEqual(p.idle_timeout, 999999)
+
+    def test_a_shorter_timeout_set_during_the_cooldown_waits_until_the_heater_is_released(self):
+        p = Printer(tracking=True)
+        p.run('START_COOLDOWN', PROFILE='HOLD_120M_COOL_NO_EX')
+        self.assertEqual(p.idle_timeout, 9360)
+        p.run('SET_IDLE_TIMEOUT', TIMEOUT=1000)  # a RESUME putting the configured value back
+        self.assertEqual(p.idle_timeout, 9360)
+        self.assertEqual(p.state[VARS].user_idle_timeout, 1000)
+        self.assertTrue(any('Idle timeout kept at 9360 s while the cooldown runs, then set to 1000 s' in m
+                            for m in self.messages(p)))
+        self.run_until(p, 3)
+        self.assertEqual(p.idle_timeout, 1000)
+
+    def test_a_longer_timeout_set_during_the_cooldown_is_applied_and_handed_back(self):
+        p = Printer(tracking=True)
+        p.run('START_COOLDOWN', PROFILE='HOLD_120M_COOL_NO_EX')
+        p.run('SET_IDLE_TIMEOUT', TIMEOUT=43200)  # PAUSE
+        self.assertEqual(p.idle_timeout, 43200)
+        self.assertFalse(any('Idle timeout kept' in m for m in self.messages(p)))
+        self.run_until(p, 3)
+        self.assertEqual(p.idle_timeout, 43200)
+
+    def test_reset_hands_back_the_timeout_set_by_hand(self):
+        p = Printer(tracking=True)
+        p.run('SET_IDLE_TIMEOUT', TIMEOUT=2000)
+        p.run('START_COOLDOWN', PROFILE='HOLD_120M_COOL_NO_EX')
+        p.run('COOLDOWN_RESET')
+        self.assertEqual(p.idle_timeout, 2000)
+        self.assertEqual(p.state[VARS].user_idle_timeout, 2000)  # reset keeps what was set by hand
+        self.assertEqual(p.state[VARS].extended_idle_timeout, 0)
+
+    def test_without_a_hand_set_timeout_the_configured_one_comes_back(self):
+        p = Printer(tracking=True)
+        p.run('START_COOLDOWN', PROFILE='HOLD_120M_COOL_NO_EX')
+        self.assertEqual(p.idle_timeout, 9360)
+        self.assertEqual(p.state[VARS].user_idle_timeout, 0)
+        self.run_until(p, 3)
+        self.assertEqual(p.idle_timeout, 4800)
+
+    def test_timeout_values_klipper_should_judge_are_passed_on_unrecorded(self):
+        for params in [{'TIMEOUT': 'abc'}, {'TIMEOUT': 0}, {'TIMEOUT': -5}, {'TIMEOUT': 'inf'}, {}]:
+            with self.subTest(params=params):
+                p = Printer(tracking=True)
+                p.run('SET_IDLE_TIMEOUT', **params)
+                self.assertEqual(p.state[VARS].user_idle_timeout, 0)
+                self.assertTrue(any(c.startswith('SET_IDLE_TIMEOUT_BASE') for c in p.commands))
 
     def test_reset_leaves_heaters_and_fans(self):
         p = Printer()

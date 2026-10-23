@@ -102,6 +102,15 @@ Requires Hardware Controls 1.0.0 or later.
 - Completion also turns the bed heater off (when its target is above 0), so a
   finished cooldown leaves no heater on. It already turned off the chamber heater
   and every fan, including the part fan and fans you set by hand.
+- New `idle_timeout_tracking.cfg`, included by `cooldown.cfg`, wraps
+  `SET_IDLE_TIMEOUT` and remembers the timeout set by hand
+  (`_COOLDOWN_VARS user_idle_timeout`). START extends from that value, a shorter
+  value set during the hold and ramp is held back until the heater is released
+  (`Idle timeout kept at N s while the cooldown runs, then set to M s`), and phase
+  3, completion and reset put the remembered value back. Before, they wrote the
+  configured value, so `DISABLE_TIMEOUT` (999999) and a pause (43200) were
+  replaced by 4800. Remove the include line if another config renames
+  `SET_IDLE_TIMEOUT`.
 - Phase 3 REST turns the bed heater off when its target is above 0 and says so
   (`Bed heater turned off (its target was 100°C), the bed now cools with the
   chamber`). A bed target left on after the print used to keep CHILL from ever

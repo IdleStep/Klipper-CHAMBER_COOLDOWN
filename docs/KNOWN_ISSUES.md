@@ -40,11 +40,17 @@ baseline:
   not only during a print. Klipper-Configs' PRINT_START calls `COOLDOWN_RESET`
   first, so the check matters only for a print started some other way.
 - The cooldown cannot read the idle timeout in force (a macro only sees the
-  configured `[idle_timeout]` value). When a profile needs a longer timeout it
-  sets one computed from the configured value, and at phase 3, on completion or
-  on reset it writes the configured value back. A timeout you set yourself
-  (`SET_IDLE_TIMEOUT`, `DISABLE_TIMEOUT`, a pause) is therefore replaced, and a
-  longer one can be shortened during the hold and ramp.
+  configured `[idle_timeout]` value). `idle_timeout_tracking.cfg` (included by
+  `cooldown.cfg`) wraps `SET_IDLE_TIMEOUT` and remembers the last value set by
+  hand, so a timeout from `DISABLE_TIMEOUT`, a pause or `SET_IDLE_TIMEOUT` is
+  respected: START extends only when the cooldown needs more than that value,
+  a shorter value set during the hold and ramp (a RESUME) waits until the heater is
+  released, and phase 3, completion and reset hand the remembered value back.
+  The remembered value, like the timeout, is lost when Klipper restarts. Only
+  one config can rename `SET_IDLE_TIMEOUT`: if yours already does, remove the
+  `[include idle_timeout_tracking.cfg]` line from `cooldown.cfg`. The cooldown then
+  works from the configured value as before, replacing a timeout you set yourself
+  and sometimes shortening a longer one during the hold and ramp.
 - Completion needs the bed reading at or below `chamber_cooled_temp`. Phase 3
   turns the bed heater off (with a `Bed heater turned off` message) so a bed
   target left on after the print cannot stop the cooldown from completing. The

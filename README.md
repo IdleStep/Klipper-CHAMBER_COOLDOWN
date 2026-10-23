@@ -79,8 +79,18 @@ or bed fan speed by hand, or a print starts (Klipper's `print_stats.state` becom
 `printing`; homing, probing and other moves do not stop it).
 
 When hold, ramp and rest would outlast `[idle_timeout]`, START_COOLDOWN raises
-the timeout for those phases and restores the configured value when the heater
-is released. The normal idle timeout still limits the exhaust and chill phases.
+the timeout for those phases and restores the previous value when the heater
+is released. The previous value is the one you set with `SET_IDLE_TIMEOUT`
+(`idle_timeout_tracking.cfg` remembers it, and a pause, resume or
+`DISABLE_TIMEOUT` that sets one is covered too), otherwise the configured one.
+A shorter timeout set while the cooldown has the longer one in force is applied
+when the heater is released. The normal idle timeout still limits the exhaust
+and chill phases.
+
+`idle_timeout_tracking.cfg` wraps `SET_IDLE_TIMEOUT` (`rename_existing`). Only one
+config can do that: if another file of yours already renames it, remove the
+`[include idle_timeout_tracking.cfg]` line from `cooldown.cfg`, and the cooldown
+goes back to restoring the configured value.
 
 ## Profiles
 
