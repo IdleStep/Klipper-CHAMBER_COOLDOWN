@@ -281,6 +281,34 @@ class Templates(unittest.TestCase):
         for fan in ['exhaust_fan', 'external_pc', 'bed_fans']:
             self.assertEqual(p.state['fan_generic ' + fan].speed, 1, fan)
 
+    def test_rest_turns_a_hot_bed_off_and_says_so(self):
+        for profile in ['REST_5M_THEN_EX', 'HOLD_60M_COOL_EX']:  # rest and no-rest paths both release the bed
+            with self.subTest(profile=profile):
+                p = Printer()
+                p.state['heater_bed'].update(target=100., temperature=95.)
+                p.run('START_COOLDOWN', PROFILE=profile)
+                self.assertEqual(p.state['heater_bed'].target, 100)  # held until the passive phases begin
+                self.run_until(p, 3)
+                p.run('_COOLDOWN_LOOP')
+                self.assertIn(p.state[VARS].phase, (3, 4))  # a profile without a rest moves on at once
+                self.assertEqual(p.state['heater_bed'].target, 0)
+                notes = [m for m in self.messages(p) if 'Bed heater turned off' in m]
+                self.assertEqual(len(notes), 1)
+                self.assertIn('target was 100', notes[0])
+                for _ in range(3):  # its own change is not mistaken for a hand change
+                    p.run('_COOLDOWN_LOOP')
+                self.assertNotEqual(p.state[VARS].phase, 0)
+                self.assertFalse(any('changed by hand' in m for m in self.messages(p)))
+
+    def test_rest_leaves_a_bed_that_is_already_off_alone(self):
+        p = Printer()
+        p.state['heater_bed'].update(target=0., temperature=60.)
+        p.run('START_COOLDOWN', PROFILE='REST_5M_THEN_EX')
+        self.run_until(p, 3)
+        p.run('_COOLDOWN_LOOP')
+        self.assertFalse(any(c.startswith('SET_HEATER_TEMPERATURE HEATER=heater_bed') for c in p.commands))
+        self.assertFalse(any('Bed heater turned off' in m for m in self.messages(p)))
+
     def test_fans_are_left_alone_when_there_is_no_rest(self):
         p = Printer()
         p.state['fan_generic external_pc'].speed = 0.6

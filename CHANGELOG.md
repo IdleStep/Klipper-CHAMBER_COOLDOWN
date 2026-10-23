@@ -102,6 +102,10 @@ Requires Hardware Controls 1.0.0 or later.
 - Completion also turns the bed heater off (when its target is above 0), so a
   finished cooldown leaves no heater on. It already turned off the chamber heater
   and every fan, including the part fan and fans you set by hand.
+- Phase 3 REST turns the bed heater off when its target is above 0 and says so
+  (`Bed heater turned off (its target was 100°C), the bed now cools with the
+  chamber`). A bed target left on after the print used to keep CHILL from ever
+  completing. The bed stays on through HOLD and RAMP.
 - The `changed by hand` stop names what changed (`chamber target`, `bed target`,
   `exhaust fan speed`, `bed fans speed`) and says the rest of the cooldown is
   cancelled and the heaters and fans stay as set. The line starts as before.

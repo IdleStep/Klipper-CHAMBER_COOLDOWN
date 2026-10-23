@@ -63,7 +63,7 @@ the next phase, or advances the current one.
 |---|---|---|
 | 1 HOLD | Chamber heater keeps its print target. | Hold time passes. Skipped when the profile has no hold. Without a chamber heater, or when the target is already below the ramp target, the cooldown goes straight to phase 3. |
 | 2 RAMP | Target drops `cooldown_ramp_step_c` every `cooldown_ramp_step_seconds`, never below the ramp target. | Target reaches the ramp target. Skipped when the profile has none. |
-| 3 REST | Chamber heater off; exhaust, external_pc and bed fans off if the rest is longer than 0. | Rest time passes. Skipped when the profile has no rest. |
+| 3 REST | Chamber and bed heaters off; exhaust, external_pc and bed fans off if the rest is longer than 0. | Rest time passes. Skipped when the profile has no rest. |
 | 4 EXHAUST | Exhaust, external_pc and bed fans set to the profile speed (0 when `exhaust_enable` is False). A speed above 0 that is below a fan's `min_power` (or `off_below`) is raised to that minimum for that fan. | On the next tick. |
 | 5 CHILL | Waits; fans keep running. | Chamber and bed at or below `chamber_cooled_temp`. |
 
@@ -151,6 +151,7 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `chamber_sensor in _HARDWARE_VARS has no temperature. Cooldown not started.` (and the same for `bed_heater`) | The named object exists but is not a temperature device, so the name in `_HARDWARE_VARS` is wrong. |
 | `Cooldown stopped: the chamber or bed temperature cannot be read` | A tick found a reading that is not a number, and reset the cooldown. |
 | `Cooldown stopped: a value in _COOLDOWN_VARS is not valid` | A tick found a state value that is not a number, or a phase outside 1-5, and reset the cooldown. Something wrote to `_COOLDOWN_VARS` directly. |
+| `Bed heater turned off (its target was 100°C), the bed now cools with the chamber` | Phase 3 released a bed target that was still on. |
 | `Cooldown complete` | The chamber and bed heaters and all fans are off. |
 | `Cooldown reset` | COOLDOWN_RESET stopped a running cooldown, for example from PRINT_START or the idle timeout. Nothing is printed when no cooldown was running, and the cooldown's own stops print only their own message. |
 

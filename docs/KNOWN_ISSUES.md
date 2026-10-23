@@ -45,9 +45,11 @@ baseline:
   on reset it writes the configured value back. A timeout you set yourself
   (`SET_IDLE_TIMEOUT`, `DISABLE_TIMEOUT`, a pause) is therefore replaced, and a
   longer one can be shortened during the hold and ramp.
-- Completion needs the bed reading at or below `chamber_cooled_temp`. A bed
-  target above it, left on after the print, stops the cooldown from completing;
-  the exhaust fans then run until the idle timeout ends the session.
+- Completion needs the bed reading at or below `chamber_cooled_temp`. Phase 3
+  turns the bed heater off (with a `Bed heater turned off` message) so a bed
+  target left on after the print cannot stop the cooldown from completing. The
+  bed is held on through the hold and ramp. A bed you switch back on by hand
+  later cancels the cooldown, as any bed target change does.
 - `UPDATE_DELAYED_GCODE ID=_COOLDOWN_LOOP DURATION=0` typed by hand stops the
   loop without resetting the cooldown, so it still shows a running phase and the
   heater keeps its target. Use `COOLDOWN_RESET` to stop it. COOLDOWN_STATUS warns
