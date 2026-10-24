@@ -30,7 +30,9 @@ baseline:
 - A phase the profile does not use still prints its numbered banner, marked
   `skipped`, so the user sees every phase from 1/5 to 5/5.
 - The exhaust and chill phases have no separate deadline: the normal idle timeout
-  applies once the heater is released.
+  applies once the heater is released, counted from the fan command that starts
+  the exhaust phase. A chill that takes longer than the timeout ends silently
+  (the idle gcode turns the fans and heaters off and calls `COOLDOWN_RESET`).
 - HIPS and PCTG keep their PASSIVE_ONLY fallback from Turbo's old retraction table.
   Changing intended profiles is separate work.
 

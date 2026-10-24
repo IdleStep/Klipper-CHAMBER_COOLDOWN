@@ -87,6 +87,15 @@ A shorter timeout set while the cooldown has the longer one in force is applied
 when the heater is released. The normal idle timeout still limits the exhaust
 and chill phases.
 
+Klipper counts the idle timeout from the last move, heater command or fan
+command, not from the start of the cooldown (measured on Turbo: a heater or fan
+command restarts the clock, writing a macro variable or `M400` does not). Every
+phase change and every ramp step sends one, so the timeout only has to cover the
+longest stretch between them. START_COOLDOWN still checks the whole cooldown, so
+it raises the timeout sooner than strictly needed. A 60-minute hold at 46°C fits
+Turbo's 4800 s without a raise (no `Timeout set` line), and the printer stays
+`Ready` through it.
+
 `idle_timeout_tracking.cfg` wraps `SET_IDLE_TIMEOUT` (`rename_existing`). Only one
 config can do that: if another file of yours already renames it, remove the
 `[include idle_timeout_tracking.cfg]` line from `cooldown.cfg`, and the cooldown
