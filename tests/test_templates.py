@@ -19,16 +19,34 @@ from klipper_sim import State, wrap  # noqa: E402,F401  (re-exported for Klipper
 COOLDOWN_MODULES = ['profiles', 'materials', 'engine']
 # What README says cooldown needs from Hardware Controls.
 REQUIRED_HARDWARE_MODULES = ['settings', 'fans', 'chamber']
+VARS = 'gcode_macro _COOLDOWN_VARS'
+CHAMBER = 'heater_generic chamber'
 
 
 class Printer(klipper_sim.Printer):
     """Simulated printer with Hardware Controls and, optionally, cooldown loaded."""
 
-    def __init__(self, hardware=True, cooldown=True):
+    def __init__(self, hardware=True, cooldown=True, tracking=False):
         super().__init__(hardware)
         if cooldown:
             for name in COOLDOWN_MODULES:
                 self.load(ROOT / (name + '.cfg'))
+        if tracking:
+            self.load(ROOT / 'idle_timeout_tracking.cfg')
+
+    def execute(self, line):
+        # idle_timeout_tracking.cfg renames the built-in command to this one.
+        if line.split()[0].upper() == 'SET_IDLE_TIMEOUT_BASE':
+            self.commands.append(line)
+            args = dict(token.split('=', 1) for token in line.split()[1:] if '=' in token)
+            try:
+                seconds = float(args['TIMEOUT'])
+            except (KeyError, ValueError):
+                return  # Klipper would report the bad or missing value
+            if seconds > 0:
+                self.idle_timeout = seconds
+            return
+        super().execute(line)
 
 
 class Templates(unittest.TestCase):
@@ -116,14 +134,32 @@ class Templates(unittest.TestCase):
         for _ in range(limit):
             p.run('_COOLDOWN_LOOP')
             cv = p.state['gcode_macro _COOLDOWN_VARS']
-            trace.append((cv.phase, cv.phase_loops, p.state['heater_generic chamber'].target))
+            trace.append((cv.phase, cv.phase_loops, p.state[CHAMBER].target if CHAMBER in p.state else 0))
             if cv.phase in (0, phase):
                 break
         return trace
 
     def custom_profile(self, p, **changes):
         table = p.state['gcode_macro _COOLDOWN_PROFILES'].profiles
-        table['CUSTOM'] = wrap(dict(table['HOLD_60M_COOL_EX'], **changes))
+        profile = dict(table['HOLD_60M_COOL_EX'], **changes)
+        for key in [key for key, value in changes.items() if value is Ellipsis]:
+            del profile[key]  # Ellipsis removes the key
+        table['CUSTOM'] = wrap(profile)
+
+    def messages(self, p):
+        return [c for c in p.commands if c.startswith('RESPOND')]
+
+    def banner_numbers(self, p):
+        return [c.split('MSG="Cooldown phase ')[1][:3] for c in p.commands if 'Cooldown phase' in c]
+
+    def sensor_printer(self, **reading):
+        """A printer whose chamber has only a temperature sensor."""
+        p = Printer()
+        p.state.pop(CHAMBER)
+        p.state['temperature_sensor enclosure'] = wrap(reading)
+        p.state['gcode_macro _HARDWARE_VARS'].chamber_heater = ''
+        p.state['gcode_macro _HARDWARE_VARS'].chamber_sensor = 'temperature_sensor enclosure'
+        return p
 
     def test_heater_released_for_every_profile_and_start_target(self):
         for start in [55., 30., 0.]:
@@ -162,6 +198,35 @@ class Templates(unittest.TestCase):
         self.assertEqual(p.state['heater_generic chamber'].target, 0)
         self.assertIn('RESET_FANS', p.commands)
 
+    def test_completion_turns_every_heater_and_fan_off(self):
+        for bed_heater in ['heater_bed', 'heater_generic buildplate']:
+            with self.subTest(bed_heater=bed_heater):
+                p = Printer()
+                if bed_heater != 'heater_bed':
+                    p.state[bed_heater] = p.state.pop('heater_bed')
+                    p.state['gcode_macro _HARDWARE_VARS'].bed_heater = bed_heater
+                p.state[CHAMBER].update(target=30., temperature=30.)
+                p.state[bed_heater].update(target=30., temperature=30.)
+                p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+                p.state['fan'].speed = 0.7  # part fan and external_pc are not tracked, so they are not a hand change
+                p.state['fan_generic external_pc'].speed = 0.6
+                p.run('_COOLDOWN_LOOP')
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertEqual(p.state[CHAMBER].target, 0)
+                self.assertEqual(p.state[bed_heater].target, 0)
+                self.assertEqual(p.state['fan'].speed, 0)
+                self.assertEqual(p.state['fan_generic external_pc'].speed, 0)
+                self.assertEqual(p.state['fan_generic exhaust_fan'].speed, 0)
+
+    def test_completion_leaves_a_bed_that_is_already_off_alone(self):
+        p = Printer()
+        p.state[CHAMBER].update(target=30., temperature=30.)
+        p.state['heater_bed'].update(target=0., temperature=30.)
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertFalse(any(c.startswith('SET_HEATER_TEMPERATURE HEATER=heater_bed') for c in p.commands))
+
     def test_idle_timeout_extended_for_heated_phases_only(self):
         cases = [('HOLD_120M_COOL_NO_EX', 7200 + 13 * 120 + 600),
                  ('HOLD_60M_COOL_EX', 3600 + 13 * 120 + 600)]
@@ -194,6 +259,82 @@ class Templates(unittest.TestCase):
         p.run('COOLDOWN_RESET')
         self.assertEqual(p.idle_timeout, 43200)
 
+    def test_a_timeout_set_by_hand_is_remembered(self):
+        p = Printer(tracking=True)
+        p.run('SET_IDLE_TIMEOUT', TIMEOUT=2000)
+        self.assertEqual(p.idle_timeout, 2000)
+        self.assertEqual(p.state[VARS].user_idle_timeout, 2000)
+
+    def test_cooldown_extends_from_the_timeout_in_force_and_hands_it_back(self):
+        for hand, expected_start in [(2000, 9360), (4800, 9360)]:
+            with self.subTest(hand=hand):
+                p = Printer(tracking=True)
+                p.run('SET_IDLE_TIMEOUT', TIMEOUT=hand)
+                p.run('START_COOLDOWN', PROFILE='HOLD_120M_COOL_NO_EX')
+                self.assertEqual(p.idle_timeout, expected_start)
+                self.assertEqual(p.state[VARS].user_idle_timeout, hand)  # its own change is not recorded
+                self.run_until(p, 3)
+                self.assertEqual(p.idle_timeout, hand)
+                self.assertEqual(p.state[VARS].idle_timeout_extended, 0)
+
+    def test_a_longer_timeout_set_by_hand_is_not_shortened_or_replaced(self):
+        for profile in ['HOLD_120M_COOL_NO_EX', 'REST_5M_THEN_EX']:
+            with self.subTest(profile=profile):
+                p = Printer(tracking=True)
+                p.run('SET_IDLE_TIMEOUT', TIMEOUT=999999)  # DISABLE_TIMEOUT
+                p.run('START_COOLDOWN', PROFILE=profile)
+                self.assertEqual(p.idle_timeout, 999999)
+                self.assertEqual(p.state[VARS].idle_timeout_extended, 0)
+                self.run_until(p, 4)
+                p.run('COOLDOWN_RESET')
+                self.assertEqual(p.idle_timeout, 999999)
+
+    def test_a_shorter_timeout_set_during_the_cooldown_waits_until_the_heater_is_released(self):
+        p = Printer(tracking=True)
+        p.run('START_COOLDOWN', PROFILE='HOLD_120M_COOL_NO_EX')
+        self.assertEqual(p.idle_timeout, 9360)
+        p.run('SET_IDLE_TIMEOUT', TIMEOUT=1000)  # a RESUME putting the configured value back
+        self.assertEqual(p.idle_timeout, 9360)
+        self.assertEqual(p.state[VARS].user_idle_timeout, 1000)
+        self.assertTrue(any('Idle timeout kept at 9360 s while the cooldown runs, then set to 1000 s' in m
+                            for m in self.messages(p)))
+        self.run_until(p, 3)
+        self.assertEqual(p.idle_timeout, 1000)
+
+    def test_a_longer_timeout_set_during_the_cooldown_is_applied_and_handed_back(self):
+        p = Printer(tracking=True)
+        p.run('START_COOLDOWN', PROFILE='HOLD_120M_COOL_NO_EX')
+        p.run('SET_IDLE_TIMEOUT', TIMEOUT=43200)  # PAUSE
+        self.assertEqual(p.idle_timeout, 43200)
+        self.assertFalse(any('Idle timeout kept' in m for m in self.messages(p)))
+        self.run_until(p, 3)
+        self.assertEqual(p.idle_timeout, 43200)
+
+    def test_reset_hands_back_the_timeout_set_by_hand(self):
+        p = Printer(tracking=True)
+        p.run('SET_IDLE_TIMEOUT', TIMEOUT=2000)
+        p.run('START_COOLDOWN', PROFILE='HOLD_120M_COOL_NO_EX')
+        p.run('COOLDOWN_RESET')
+        self.assertEqual(p.idle_timeout, 2000)
+        self.assertEqual(p.state[VARS].user_idle_timeout, 2000)  # reset keeps what was set by hand
+        self.assertEqual(p.state[VARS].extended_idle_timeout, 0)
+
+    def test_without_a_hand_set_timeout_the_configured_one_comes_back(self):
+        p = Printer(tracking=True)
+        p.run('START_COOLDOWN', PROFILE='HOLD_120M_COOL_NO_EX')
+        self.assertEqual(p.idle_timeout, 9360)
+        self.assertEqual(p.state[VARS].user_idle_timeout, 0)
+        self.run_until(p, 3)
+        self.assertEqual(p.idle_timeout, 4800)
+
+    def test_timeout_values_klipper_should_judge_are_passed_on_unrecorded(self):
+        for params in [{'TIMEOUT': 'abc'}, {'TIMEOUT': 0}, {'TIMEOUT': -5}, {'TIMEOUT': 'inf'}, {}]:
+            with self.subTest(params=params):
+                p = Printer(tracking=True)
+                p.run('SET_IDLE_TIMEOUT', **params)
+                self.assertEqual(p.state[VARS].user_idle_timeout, 0)
+                self.assertTrue(any(c.startswith('SET_IDLE_TIMEOUT_BASE') for c in p.commands))
+
     def test_reset_leaves_heaters_and_fans(self):
         p = Printer()
         p.state['fan_generic exhaust_fan'].speed = .5
@@ -213,6 +354,60 @@ class Templates(unittest.TestCase):
         self.assertEqual(p.state['fan_generic exhaust_fan'].speed, 0)
         self.run_until(p, 5)
         self.assertEqual(p.state['fan_generic exhaust_fan'].speed, 1)
+
+    def test_rest_turns_external_pc_and_bed_fans_off_too(self):
+        p = Printer()
+        p.state['fan_generic bed_fans'] = wrap({'speed': 0.6})
+        p.state['fan_generic external_pc'].speed = 0.6
+        p.state['fan_generic exhaust_fan'].speed = 0.6
+        p.run('START_COOLDOWN', PROFILE='REST_5M_THEN_EX')
+        self.run_until(p, 3)
+        p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].phase, 3)
+        for fan in ['exhaust_fan', 'external_pc', 'bed_fans']:
+            self.assertEqual(p.state['fan_generic ' + fan].speed, 0, fan)
+        for _ in range(10):  # the rest keeps running: its own fan changes are not a hand change
+            p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].phase, 3)
+        self.run_until(p, 5)
+        for fan in ['exhaust_fan', 'external_pc', 'bed_fans']:
+            self.assertEqual(p.state['fan_generic ' + fan].speed, 1, fan)
+
+    def test_rest_turns_a_hot_bed_off_and_says_so(self):
+        for profile in ['REST_5M_THEN_EX', 'HOLD_60M_COOL_EX']:  # rest and no-rest paths both release the bed
+            with self.subTest(profile=profile):
+                p = Printer()
+                p.state['heater_bed'].update(target=100., temperature=95.)
+                p.run('START_COOLDOWN', PROFILE=profile)
+                self.assertEqual(p.state['heater_bed'].target, 100)  # held until the passive phases begin
+                self.run_until(p, 3)
+                p.run('_COOLDOWN_LOOP')
+                self.assertIn(p.state[VARS].phase, (3, 4))  # a profile without a rest moves on at once
+                self.assertEqual(p.state['heater_bed'].target, 0)
+                notes = [m for m in self.messages(p) if 'Bed heater turned off' in m]
+                self.assertEqual(len(notes), 1)
+                self.assertIn('target was 100', notes[0])
+                for _ in range(3):  # its own change is not mistaken for a hand change
+                    p.run('_COOLDOWN_LOOP')
+                self.assertNotEqual(p.state[VARS].phase, 0)
+                self.assertFalse(any('changed by hand' in m for m in self.messages(p)))
+
+    def test_rest_leaves_a_bed_that_is_already_off_alone(self):
+        p = Printer()
+        p.state['heater_bed'].update(target=0., temperature=60.)
+        p.run('START_COOLDOWN', PROFILE='REST_5M_THEN_EX')
+        self.run_until(p, 3)
+        p.run('_COOLDOWN_LOOP')
+        self.assertFalse(any(c.startswith('SET_HEATER_TEMPERATURE HEATER=heater_bed') for c in p.commands))
+        self.assertFalse(any('Bed heater turned off' in m for m in self.messages(p)))
+
+    def test_fans_are_left_alone_when_there_is_no_rest(self):
+        p = Printer()
+        p.state['fan_generic external_pc'].speed = 0.6
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        self.run_until(p, 3)
+        self.assertEqual(p.state[VARS].phase, 3)
+        self.assertEqual(p.state['fan_generic external_pc'].speed, 0.6)
 
     def test_exhaust_enable_is_honored(self):
         p = Printer()
@@ -241,8 +436,88 @@ class Templates(unittest.TestCase):
         p.run('START_COOLDOWN', PROFILE='CUSTOM')
         message = [c for c in p.commands if 'Invalid cooldown profile CUSTOM' in c][0]
         self.assertNotIn(';', message)
+        self.assertIn('Invalid cooldown profile CUSTOM: ', message)
         self.assertIn('0 or more, exhaust_fan_speed must be', message)
         self.assertTrue(message.endswith('Cooldown not started."'))
+
+    def test_negative_ramp_target_is_refused(self):
+        p = Printer()
+        self.custom_profile(p, chamber_target_temp=-5)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertNotIn('_COOLDOWN_LOOP', p.delays)
+        self.assertFalse(any(c.startswith('SET_IDLE_TIMEOUT') for c in p.commands))
+        message = [c for c in self.messages(p) if 'Invalid cooldown profile CUSTOM: ' in c]
+        self.assertEqual(len(message), 1)
+        self.assertIn('chamber_target_temp must be 0 or more', message[0])
+
+    def test_zero_ramp_target_still_means_no_ramp(self):
+        p = Printer()
+        self.custom_profile(p, chamber_target_temp=0)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        self.assertEqual(p.state[VARS].phase, 1)
+
+    def test_tiny_ramp_step_is_refused_only_when_ramping(self):
+        for step, ramp_target, started in [(0.01, 42, False), (0.09, 42, False), (0.1, 42, True), (0.5, 42, True),
+                                           (0.01, 0, True)]:
+            with self.subTest(step=step, ramp_target=ramp_target):
+                p = Printer()
+                self.custom_profile(p, cooldown_ramp_step_c=step, chamber_target_temp=ramp_target)
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.assertEqual(p.state[VARS].phase, 1 if started else 0)
+                refused = [c for c in self.messages(p) if 'cooldown_ramp_step_c must be 0.1 or more' in c]
+                self.assertEqual(len(refused), 0 if started else 1)
+                if not started:
+                    self.assertFalse(any(c.startswith('SET_IDLE_TIMEOUT') for c in p.commands))
+
+    def fan_minimum_printer(self, speed, **minimums):
+        """Immediate-exhaust profile at `speed`; minimums maps a fan name to its fan_generic settings."""
+        p = Printer()
+        p.state['fan_generic bed_fans'] = wrap({'speed': 0.})
+        for name, fan_settings in minimums.items():
+            p.state['configfile'].settings['fan_generic ' + name] = wrap(fan_settings)
+        self.custom_profile(p, chamber_hold_minutes=0, chamber_target_temp=0, cooldown_ramp_step_c=0,
+                            cooldown_ramp_step_seconds=0, exhaust_fan_speed=speed)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        self.run_until(p, 5)
+        return p
+
+    def test_speed_below_a_fan_minimum_is_raised_and_reported(self):
+        p = self.fan_minimum_printer(0.05, exhaust_fan={'min_power': 0.2}, external_pc={'min_power': None, 'off_below': 0.1})
+        self.assertEqual(p.state['fan_generic exhaust_fan'].speed, 0.2)
+        self.assertEqual(p.state['fan_generic external_pc'].speed, 0.1)
+        self.assertEqual(p.state['fan_generic bed_fans'].speed, 0.05)  # no minimum configured
+        warnings = [c for c in self.messages(p) if 'below the fan minimum' in c]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('exhaust_fan (0.2), external_pc (0.1)', warnings[0])
+        self.assertNotIn('bed_fans', warnings[0])
+        self.assertEqual(p.state[VARS].phase, 5)  # the raised speeds are not seen as a hand change
+
+    def test_exhaust_banner_names_each_fan_when_the_speeds_differ(self):
+        p = self.fan_minimum_printer(0.05, exhaust_fan={'min_power': 0.2}, external_pc={'min_power': None, 'off_below': 0.1})
+        banners = [c for c in self.messages(p) if 'phase 4/5' in c]
+        self.assertEqual(len(banners), 1)
+        self.assertIn('EXHAUST: exhaust_fan to 0.2, external_pc to 0.1, bed_fans to 0.05', banners[0])
+
+    def test_exhaust_banner_keeps_one_speed_when_the_fans_agree(self):
+        for speed, minimums in [(0.5, {}), (0.5, {'exhaust_fan': {'min_power': 0.2}}), (0.0, {})]:
+            with self.subTest(speed=speed):
+                p = self.fan_minimum_printer(speed, **minimums)
+                banners = [c for c in self.messages(p) if 'phase 4/5' in c]
+                self.assertEqual(len(banners), 1)
+                self.assertIn('EXHAUST: fans to %s"' % speed, banners[0])
+
+    def test_speed_at_or_above_the_minimum_or_zero_is_left_alone(self):
+        for speed, enable in [(0.2, True), (0.5, True), (1.0, True), (0.0, True), (0.05, False)]:
+            with self.subTest(speed=speed, enable=enable):
+                p = Printer()
+                p.state['configfile'].settings['fan_generic exhaust_fan'] = wrap({'min_power': 0.2})
+                self.custom_profile(p, chamber_hold_minutes=0, chamber_target_temp=0, cooldown_ramp_step_c=0,
+                                    cooldown_ramp_step_seconds=0, exhaust_fan_speed=speed, exhaust_enable=enable)
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.run_until(p, 5)
+                self.assertEqual(p.state['fan_generic exhaust_fan'].speed, speed if enable else 0)
+                self.assertFalse(any('below the fan minimum' in c for c in self.messages(p)))
 
     def test_ramp_step_does_not_overshoot(self):
         p = Printer()
@@ -295,6 +570,516 @@ class Templates(unittest.TestCase):
         p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['DEFAULT'] = 'IMMEDIATE_EX'
         p.run('COOLDOWN_SELECT', MATERIAL='UNOBTAINIUM')
         self.assertEqual(p.state['gcode_macro _COOLDOWN_VARS'].cooldown_profile, 'IMMEDIATE_EX')
+
+    def test_unknown_material_is_reported_but_known_and_blank_are_not(self):
+        p = Printer()
+        p.run('COOLDOWN_SELECT', MATERIAL='ASAA')
+        notes = [c for c in self.messages(p) if 'Unknown material' in c]
+        self.assertEqual(len(notes), 1)
+        self.assertIn('Unknown material ASAA, using the DEFAULT profile PASSIVE_ONLY', notes[0])
+        self.assertEqual(p.state[VARS].cooldown_profile, 'PASSIVE_ONLY')
+        for material in ['ASA', 'asa', ' ASA ', 'DEFAULT', '', '  ', None]:
+            with self.subTest(material=material):
+                p = Printer()
+                p.run('COOLDOWN_SELECT', **({} if material is None else {'MATERIAL': material}))
+                self.assertFalse(any('Unknown material' in c for c in self.messages(p)))
+
+    def test_unknown_material_with_a_quote_does_not_break_the_message(self):
+        p = Printer()
+        p.run('COOLDOWN_SELECT', MATERIAL='A"B')  # must not raise
+        notes = [c for c in self.messages(p) if 'Unknown material' in c]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("Unknown material A'B,", notes[0])
+
+    def test_cooldown_select_refuses_a_profile_that_does_not_exist(self):
+        for material, mapped in [('XX', 'NOPE'), ('DEFAULT', 'NOPE'), ('YY', None)]:
+            with self.subTest(material=material, mapped=mapped):
+                p = Printer()
+                p.run('COOLDOWN_SELECT', MATERIAL='ASA')
+                p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table[material] = mapped
+                p.run('COOLDOWN_SELECT', MATERIAL=material)  # must not raise
+                self.assertEqual(p.state[VARS].cooldown_profile, 'HOLD_60M_COOL_EX')  # unchanged
+                refused = [c for c in self.messages(p) if 'which is not in the profile table' in c]
+                self.assertEqual(len(refused), 1)
+                self.assertIn('Profile not changed', refused[0])
+
+    def test_cooldown_select_refuses_a_material_table_that_is_not_a_table(self):
+        for broken in [['ASA', 'HOLD_60M_COOL_EX'], 'ASA', None, 5]:
+            with self.subTest(table=broken):
+                p = Printer()
+                p.run('COOLDOWN_SELECT', MATERIAL='PLA')
+                p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table = broken
+                p.run('COOLDOWN_SELECT', MATERIAL='ASA')  # must not raise
+                self.assertEqual(p.state[VARS].cooldown_profile, 'IMMEDIATE_EX')  # unchanged
+                refused = [c for c in self.messages(p) if 'filament_table in _COOLDOWN_MATERIALS must be a table' in c]
+                self.assertEqual(len(refused), 1)
+
+    def test_cooldown_select_during_a_run_leaves_the_running_profile_alone(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('COOLDOWN_SELECT', MATERIAL='PLA')
+        self.assertEqual(p.state[VARS].cooldown_profile, 'HOLD_60M_COOL_EX')
+        self.assertEqual(sum('A cooldown is running' in c for c in self.messages(p)), 1)
+        p.run('COOLDOWN_STATUS')
+        self.assertIn('Profile: HOLD_60M_COOL_EX', p.commands[-1])
+        p.run('COOLDOWN_RESET')
+        p.run('COOLDOWN_SELECT', MATERIAL='PLA')
+        self.assertEqual(p.state[VARS].cooldown_profile, 'IMMEDIATE_EX')
+        self.assertEqual(sum('A cooldown is running' in c for c in self.messages(p)), 1)
+
+    def test_start_during_a_run_is_refused_and_changes_nothing(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        for _ in range(30):
+            p.run('_COOLDOWN_LOOP')
+        loops = p.state[VARS].phase_loops
+        before = len(p.commands)
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        refused = [c for c in p.commands[before:] if 'already running' in c]
+        self.assertEqual(len(refused), 1)
+        self.assertIn('phase 1/5', refused[0])
+        self.assertEqual(sum('Cooldown started' in c for c in p.commands), 1)
+        self.assertEqual(p.state[VARS].phase, 1)
+        self.assertEqual(p.state[VARS].phase_loops, loops)  # the hold was not restarted
+        self.assertEqual(p.state[VARS].cooldown_profile, 'HOLD_60M_COOL_EX')
+        self.assertFalse(any(c.startswith(('CHAMBER', 'SET_IDLE_TIMEOUT')) for c in p.commands[before:]))
+        p.run('COOLDOWN_RESET')
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')  # after a reset it starts again
+        self.assertEqual(p.state[VARS].cooldown_profile, 'IMMEDIATE_EX')
+        self.assertEqual(p.state[VARS].phase, 1)
+
+    def test_start_refuses_when_the_phase_value_is_corrupt_too(self):
+        p = Printer()
+        p.state[VARS].phase = 9  # the loop would stop on this; START must not start over it
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.assertEqual(sum('already running (phase 9/5)' in c for c in p.commands), 1)
+        self.assertEqual(sum('Cooldown started' in c for c in p.commands), 0)
+
+    def test_cooldown_select_accepts_a_profile_in_any_case(self):
+        p = Printer()
+        p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['XX'] = 'hold_60m_cool_ex'
+        p.run('COOLDOWN_SELECT', MATERIAL='XX')
+        self.assertEqual(p.state[VARS].cooldown_profile, 'hold_60m_cool_ex')
+        p.run('START_COOLDOWN')
+        self.assertEqual(p.state[VARS].phase, 1)
+
+    def test_non_numeric_chamber_cooled_temp_is_refused_at_start(self):
+        for value in ['35', None, [35]]:
+            with self.subTest(value=value):
+                p = Printer()
+                p.state[VARS].chamber_cooled_temp = value
+                p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertFalse(any(c.startswith('SET_IDLE_TIMEOUT') for c in p.commands))
+                self.assertTrue(any('chamber_cooled_temp' in c and 'must be a number' in c
+                                    for c in self.messages(p)))
+
+    def test_loop_stops_cleanly_on_invalid_state(self):
+        cases = [('chamber_cooled_temp', None), ('chamber_cooled_temp', '35'), ('hold_loops', 'abc'),
+                 ('ramp_step_loops', 'abc'), ('cooldown_ramp_step_c', 'abc'), ('ramp_chamber_target_temp', '42'),
+                 ('phase', 7), ('phase', -1), ('phase', 'abc')]
+        for var, value in cases:
+            with self.subTest(var=var, value=value):
+                p = Printer()
+                p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+                p.state[VARS][var] = value
+                p.run('_COOLDOWN_LOOP')  # must not raise
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertEqual(p.delays['_COOLDOWN_LOOP'], 0)
+                self.assertEqual(p.idle_timeout, 4800)
+                self.assertTrue(any('not valid' in c for c in self.messages(p)))
+
+    def test_skipped_hold_and_ramp_still_count_to_five(self):
+        p = Printer()
+        p.state[CHAMBER].target = 30.
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        self.run_until(p, 5)
+        self.assertEqual(self.banner_numbers(p), ['1/5', '2/5', '3/5', '4/5', '5/5'])
+        self.assertTrue(any('RAMP: skipped' in c for c in p.commands))
+
+    def test_no_heater_still_counts_to_five(self):
+        p = self.sensor_printer(temperature=50.)
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        self.run_until(p, 5)
+        self.assertEqual(self.banner_numbers(p), ['1/5', '2/5', '3/5', '4/5', '5/5'])
+
+    def test_bed_fans_only_printer_gets_its_fans(self):
+        p = Printer()
+        p.state.pop('fan_generic exhaust_fan')
+        p.state.pop('fan_generic external_pc')
+        p.state['fan_generic bed_fans'] = wrap({'speed': 0.})
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.run_until(p, 5)
+        self.assertEqual(p.state['fan_generic bed_fans'].speed, 1)
+        self.assertFalse(any('skipping exhaust' in c for c in p.commands))
+
+    def test_no_fans_at_all_still_skips_with_a_message(self):
+        p = Printer()
+        p.state.pop('fan_generic exhaust_fan')
+        p.state.pop('fan_generic external_pc')
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.run_until(p, 5)
+        self.assertTrue(any('skipping exhaust' in c for c in p.commands))
+
+    def test_exhaust_enable_text_is_refused(self):
+        for value in ['False', 'no', '0', 'false', None]:
+            with self.subTest(value=value):
+                p = Printer()
+                self.custom_profile(p, chamber_hold_minutes=0, chamber_target_temp=0, exhaust_enable=value)
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertTrue(any('exhaust_enable must be True or False' in c for c in self.messages(p)))
+
+    def test_exhaust_enable_booleans_and_zero_one_still_work(self):
+        for value, speed in [(True, 1.0), (False, 0.0), (1, 1.0), (0, 0.0), (Ellipsis, 1.0)]:
+            with self.subTest(value=value):
+                p = Printer()
+                self.custom_profile(p, chamber_hold_minutes=0, chamber_target_temp=0, exhaust_enable=value)
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.assertEqual(p.state[VARS].phase, 1)
+                self.assertEqual(p.state[VARS].exhaust_fan_speed, speed)
+
+    def test_missing_or_non_numeric_profile_values_are_refused(self):
+        cases = [('chamber_hold_minutes', 'abc'), ('passive_rest_minutes', None), ('chamber_target_temp', 'abc'),
+                 ('cooldown_ramp_step_c', 'abc'), ('cooldown_ramp_step_seconds', None), ('exhaust_fan_speed', 'abc'),
+                 ('chamber_hold_minutes', Ellipsis), ('exhaust_fan_speed', Ellipsis), ('chamber_hold_minutes', '60')]
+        for key, value in cases:
+            with self.subTest(key=key, value=value):
+                p = Printer()
+                self.custom_profile(p, **{key: value})
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')  # must not raise
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertNotIn('_COOLDOWN_LOOP', p.delays)
+                message = [c for c in self.messages(p) if 'Invalid cooldown profile CUSTOM' in c]
+                self.assertEqual(len(message), 1)
+                self.assertIn(key, message[0])
+                self.assertNotIn(';', message[0])
+
+    def test_profile_that_is_not_a_table_is_refused(self):
+        for value in ['oops', None, [1, 2]]:
+            with self.subTest(value=value):
+                p = Printer()
+                p.state['gcode_macro _COOLDOWN_PROFILES'].profiles['CUSTOM'] = value
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.assertEqual(p.state[VARS].phase, 0)
+
+    def test_fractional_minutes_are_honoured(self):
+        p = Printer()
+        self.custom_profile(p, chamber_hold_minutes=60.9, passive_rest_minutes=0.5)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        self.assertEqual(p.state[VARS].hold_loops, 730)
+        self.assertEqual(p.state[VARS].passive_loops, 6)
+
+    def test_sensor_only_chamber_threshold_change_is_not_an_override(self):
+        p = self.sensor_printer(temperature=50.)
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.run_until(p, 5)
+        p.state[VARS].chamber_cooled_temp = 30
+        p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].phase, 5)
+        self.assertFalse(any('changed by hand' in c for c in p.commands))
+
+    def test_status_warns_when_the_loop_has_not_run_for_a_minute(self):
+        p = Printer()
+        p.state['toolhead'] = wrap({'estimated_print_time': 100.})
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        self.assertEqual(p.state[VARS].last_tick, 100.)
+        p.state['toolhead'].estimated_print_time = 130.
+        p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].last_tick, 130.)
+        p.state['toolhead'].estimated_print_time = 190.
+        p.run('COOLDOWN_STATUS')
+        self.assertFalse(any('cooldown loop last ran' in c for c in p.commands))
+        p.state['toolhead'].estimated_print_time = 400.  # the loop was stopped by hand
+        p.run('COOLDOWN_STATUS')
+        warnings = [c for c in self.messages(p) if 'cooldown loop last ran 270 s ago' in c]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('Run COOLDOWN_RESET', warnings[0])
+        p.run('_COOLDOWN_LOOP')
+        p.run('COOLDOWN_STATUS')
+        self.assertEqual(sum('cooldown loop last ran' in c for c in p.commands), 1)
+        p.run('COOLDOWN_RESET')
+        self.assertEqual(p.state[VARS].last_tick, 0)
+        p.state['toolhead'].estimated_print_time = 900.
+        p.run('COOLDOWN_STATUS')
+        self.assertEqual(sum('cooldown loop last ran' in c for c in p.commands), 1)
+
+    def test_status_without_a_toolhead_object_does_not_warn(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('_COOLDOWN_LOOP')
+        p.run('COOLDOWN_STATUS')  # no 'toolhead' in printer: must not raise
+        self.assertEqual(p.state[VARS].last_tick, 0)
+        self.assertFalse(any('cooldown loop last ran' in c for c in p.commands))
+
+    def test_a_toolhead_without_a_clock_does_not_raise(self):
+        p = Printer()
+        p.state['toolhead'] = wrap({'homed_axes': 'xyz'})  # Klipper-Configs' simulated toolhead has no clock
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('_COOLDOWN_LOOP')
+        p.run('COOLDOWN_STATUS')
+        self.assertEqual(p.state[VARS].phase, 1)
+        self.assertEqual(p.state[VARS].last_tick, 0)
+
+    def test_status_shows_a_question_mark_outside_the_phase_range(self):
+        for phase in [-1, -6, 6, 9]:
+            with self.subTest(phase=phase):
+                p = Printer()
+                p.state[VARS].phase = phase
+                p.run('COOLDOWN_STATUS')
+                self.assertIn('Phase: %d ?' % phase, p.commands[-1])
+
+    def test_ramp_progress_line_is_rounded(self):
+        p = Printer()
+        p.state[CHAMBER].target = 45.3
+        self.custom_profile(p, chamber_hold_minutes=0, cooldown_ramp_step_c=0.1, cooldown_ramp_step_seconds=5)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        self.run_until(p, 3)
+        progress = [c for c in p.commands if 'Cooldown RAMP: chamber target' in c]
+        self.assertTrue(progress)
+        for line in progress:
+            self.assertRegex(line, r'chamber target \d+\.\d°C')
+
+    def test_material_name_is_trimmed(self):
+        for material in [' ASA', 'ASA ', '  asa\t']:
+            with self.subTest(material=material):
+                p = Printer()
+                p.run('COOLDOWN_SELECT', MATERIAL=material)
+                self.assertEqual(p.state[VARS].cooldown_profile, 'HOLD_60M_COOL_EX')
+
+    def test_profile_name_in_any_case_and_known_profiles_listed(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='immediate_ex')
+        self.assertEqual(p.state[VARS].cooldown_profile, 'IMMEDIATE_EX')
+        self.assertEqual(p.state[VARS].phase, 1)
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='NOPE')
+        message = [c for c in self.messages(p) if 'Unknown cooldown profile' in c]
+        self.assertEqual(len(message), 1)
+        self.assertIn('Known profiles: HOLD_120M_COOL_NO_EX, HOLD_30M_COOL_EX', message[0])
+        self.assertNotIn(';', message[0])
+
+    def test_double_quote_in_profile_name_does_not_break_the_message(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='a"b')  # raised a Malformed command before
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertTrue(any("a'b" in c for c in self.messages(p)))
+
+    def test_sensor_without_temperature_is_refused_at_start(self):
+        p = self.sensor_printer()  # an object with no temperature key
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertNotIn('_COOLDOWN_LOOP', p.delays)
+        self.assertTrue(any('chamber_sensor' in c and 'has no temperature' in c for c in self.messages(p)))
+
+    def test_bed_heater_without_temperature_is_refused_at_start(self):
+        p = Printer()
+        p.state['heater_bed'].pop('temperature')
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertTrue(any('bed_heater' in c and 'has no temperature' in c for c in self.messages(p)))
+
+    def test_loop_stops_cleanly_when_a_reading_disappears(self):
+        p = self.sensor_printer(temperature=50.)
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        self.assertEqual(p.state[VARS].phase, 1)
+        p.state['temperature_sensor enclosure'] = wrap({})
+        p.run('_COOLDOWN_LOOP')  # must not raise
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertEqual(p.delays['_COOLDOWN_LOOP'], 0)
+        self.assertTrue(any('cannot be read' in c for c in self.messages(p)))
+
+    def test_a_working_sensor_still_starts(self):
+        p = self.sensor_printer(temperature=50.)
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.assertEqual(p.state[VARS].phase, 1)
+
+    def test_profile_names_with_quotes_are_refused_at_start(self):
+        for name in ["O'NEIL", 'A"B']:
+            with self.subTest(name=name):
+                p = Printer()
+                table = p.state['gcode_macro _COOLDOWN_PROFILES'].profiles
+                table[name] = wrap(dict(table['HOLD_60M_COOL_EX']))
+                p.run('START_COOLDOWN', PROFILE=name)  # must not raise
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertNotIn('_COOLDOWN_LOOP', p.delays)
+                self.assertEqual(p.state[VARS].cooldown_profile, 'PASSIVE_ONLY')
+                self.assertFalse(any(c.startswith('SET_IDLE_TIMEOUT') for c in p.commands))
+                message = [c for c in self.messages(p) if 'cannot contain quote marks' in c]
+                self.assertEqual(len(message), 1)
+                self.assertNotIn('"A"B"', message[0])
+
+    def test_cooldown_select_refuses_a_profile_with_a_quote(self):
+        for name in ["O'NEIL", 'A"B']:
+            with self.subTest(name=name):
+                p = Printer()
+                p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['XX'] = name
+                p.run('COOLDOWN_SELECT', MATERIAL='XX')  # must not raise
+                self.assertEqual(p.state[VARS].cooldown_profile, 'PASSIVE_ONLY')
+                self.assertTrue(any('quote mark' in c for c in self.messages(p)))
+
+    def test_semicolon_hash_and_asterisk_in_profile_names_are_refused(self):
+        for name in ['A;B', 'A#B', 'A*B']:
+            with self.subTest(name=name):
+                p = Printer()
+                table = p.state['gcode_macro _COOLDOWN_PROFILES'].profiles
+                table[name] = wrap(dict(table['HOLD_60M_COOL_EX']))
+                p.run('START_COOLDOWN', PROFILE=name)  # must not raise
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertNotIn('_COOLDOWN_LOOP', p.delays)
+                self.assertFalse(any(c.startswith('SET_IDLE_TIMEOUT') for c in p.commands))
+                refused = [c for c in self.messages(p) if 'cannot contain quote marks, semicolons, hash signs or asterisks' in c]
+                self.assertEqual(len(refused), 1)
+                self.assertNotIn(';', refused[0].split('MSG=')[1])
+                p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['XX'] = name
+                p.run('COOLDOWN_SELECT', MATERIAL='XX')
+                self.assertEqual(p.state[VARS].cooldown_profile, 'PASSIVE_ONLY')
+                self.assertTrue(any('asterisk in its name' in c for c in self.messages(p)))
+                p.run('START_COOLDOWN', PROFILE='NOPE')  # the unknown-profile list echoes the bad key
+                listing = [c for c in self.messages(p) if 'Known profiles' in c][0].split('MSG=')[1]
+                self.assertNotIn(';', listing)
+                self.assertIn('A?B', listing)
+
+    def test_plain_profile_names_still_work(self):
+        p = Printer()
+        p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['XX'] = 'HOLD_60M_COOL_EX'
+        p.run('COOLDOWN_SELECT', MATERIAL='XX')
+        self.assertEqual(p.state[VARS].cooldown_profile, 'HOLD_60M_COOL_EX')
+
+    def test_ramp_step_seconds_is_rounded_to_five_and_reported(self):
+        for seconds, real in [(7, 5), (8, 10), (9, 10), (12, 10), (13, 15), (5, 5), (10, 10), (120, 120)]:
+            with self.subTest(seconds=seconds):
+                p = Printer()
+                self.custom_profile(p, cooldown_ramp_step_seconds=seconds)
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.assertEqual(p.state[VARS].phase, 1)
+                self.assertEqual(p.state[VARS].cooldown_ramp_step_seconds, real)
+                self.assertEqual(p.state[VARS].ramp_step_loops, real // 5)
+                notes = [c for c in self.messages(p) if 'runs as' in c]
+                self.assertEqual(len(notes), 0 if seconds == real else 1)
+                if notes:
+                    self.assertIn('%d s runs as %d s' % (seconds, real), notes[0])
+
+    def test_ramp_step_below_five_is_still_refused(self):
+        for seconds in [0, 4, 4.9]:
+            with self.subTest(seconds=seconds):
+                p = Printer()
+                self.custom_profile(p, cooldown_ramp_step_seconds=seconds)
+                p.run('START_COOLDOWN', PROFILE='CUSTOM')
+                self.assertEqual(p.state[VARS].phase, 0)
+
+    def test_step_seconds_is_left_alone_when_there_is_no_ramp(self):
+        p = Printer()
+        self.custom_profile(p, chamber_target_temp=0, cooldown_ramp_step_seconds=3)
+        p.run('START_COOLDOWN', PROFILE='CUSTOM')
+        self.assertEqual(p.state[VARS].phase, 1)
+        self.assertFalse(any('runs as' in c for c in self.messages(p)))
+
+    def test_print_check_uses_print_stats_not_idle_timeout(self):
+        p = Printer()
+        p.state['print_stats'] = wrap({'state': 'standby'})
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.run_until(p, 5)
+        for _ in range(8):
+            p.state['idle_timeout'].state = 'Printing'  # G4, homing, QGL, LOAD_FILAMENT ...
+            p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].phase, 5)
+        p.state['print_stats'].state = 'printing'
+        p.run('_COOLDOWN_LOOP')
+        self.assertEqual(p.state[VARS].phase, 0)
+        self.assertTrue(any('started printing' in c for c in self.messages(p)))
+
+    def test_print_check_without_print_stats_object(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.run_until(p, 5)
+        p.run('_COOLDOWN_LOOP')  # no 'print_stats' in printer: must not raise
+        self.assertEqual(p.state[VARS].phase, 5)
+
+    def test_reset_reports_a_running_cooldown_only(self):
+        p = Printer()
+        p.run('COOLDOWN_RESET')
+        self.assertFalse(any('Cooldown reset' in c for c in p.commands))
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('COOLDOWN_RESET')
+        self.assertEqual(sum('Cooldown reset' in c for c in p.commands), 1)
+
+    def test_engine_stops_do_not_add_a_reset_line(self):
+        def changed_by_hand(p):
+            p.state[CHAMBER].target = 50.
+
+        def invalid_value(p):
+            p.state[VARS].hold_loops = 'abc'
+
+        def unreadable_sensor(p):
+            p.state[CHAMBER].pop('temperature')
+
+        def printing(p):
+            p.state['print_stats'] = wrap({'state': 'printing'})
+
+        for stop, change in [('changed by hand', changed_by_hand), ('not valid', invalid_value),
+                             ('cannot be read', unreadable_sensor), ('started printing', printing)]:
+            with self.subTest(stop=stop):
+                p = Printer()
+                p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+                change(p)
+                p.run('_COOLDOWN_LOOP')
+                self.assertEqual(p.state[VARS].phase, 0)
+                self.assertTrue(any(stop in c for c in p.commands))
+                self.assertFalse(any('Cooldown reset' in c for c in p.commands))
+
+    def test_hand_change_stop_names_what_changed_and_leaves_it_alone(self):
+        def chamber(p):
+            p.state[CHAMBER].target = 0.
+
+        def bed(p):
+            p.state['heater_bed'].target = 60.
+
+        def exhaust(p):
+            p.state['fan_generic exhaust_fan'].speed = 0.5
+
+        def bed_fans(p):
+            p.state['fan_generic bed_fans'].speed = 0.5
+
+        for name, change in [('chamber target', chamber), ('bed target', bed), ('exhaust fan speed', exhaust),
+                             ('bed fans speed', bed_fans)]:
+            for profile in ['HOLD_60M_COOL_EX', 'IMMEDIATE_EX']:
+                with self.subTest(changed=name, profile=profile):
+                    p = Printer()
+                    p.state['fan_generic bed_fans'] = wrap({'speed': 0.})
+                    p.run('START_COOLDOWN', PROFILE=profile)
+                    if profile == 'HOLD_60M_COOL_EX':
+                        self.run_until(p, 2, limit=1)  # still in HOLD, a RAMP would have followed
+                    change(p)
+                    before = len(p.commands)
+                    p.run('_COOLDOWN_LOOP')
+                    self.assertEqual(p.state[VARS].phase, 0)
+                    self.assertEqual(p.delays['_COOLDOWN_LOOP'], 0)  # the loop is cancelled
+                    stop = [c for c in p.commands[before:] if 'changed by hand' in c]
+                    self.assertEqual(len(stop), 1)
+                    self.assertIn('hand (%s).' % name, stop[0])
+                    self.assertIn('cancelled', stop[0])
+                    self.assertNotIn(';', stop[0].split('MSG=')[1])
+                    self.assertFalse(any(c.startswith(('CHAMBER', 'EXHAUST_FAN', 'BED_FANS', 'RESET_FANS'))
+                                         for c in p.commands[before:]))
+
+    def test_hand_change_stop_lists_every_change(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.state[CHAMBER].target = 0.
+        p.state['heater_bed'].target = 60.
+        p.run('_COOLDOWN_LOOP')
+        stop = [c for c in p.commands if 'changed by hand' in c][0]
+        self.assertIn('(chamber target, bed target)', stop)
+
+    def test_completion_does_not_add_a_reset_line(self):
+        p = Printer()
+        p.state[CHAMBER].update(target=30., temperature=30.)
+        p.state['heater_bed'].temperature = 30.
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        p.run('_COOLDOWN_LOOP')
+        self.assertTrue(any('Cooldown complete' in c for c in p.commands))
+        self.assertFalse(any('Cooldown reset' in c for c in p.commands))
 
 
 if __name__ == '__main__':

@@ -22,8 +22,132 @@ Requires Hardware Controls 1.0.0 or later.
   the start of a comment, so the message was cut off.
 - Chamber progress arrow works, and the bed arrow compares with the displayed
   bed value (target or `chamber_cooled_temp`), as the chamber arrow does.
+- START_COOLDOWN refuses a `chamber_cooled_temp` that is not a number (text,
+  empty or a list). It used to start, raise the idle timeout and then raise on
+  the first tick, which left the heater at its hold target with the loop dead
+  until the idle timeout. A tick that finds a non-numeric state value or a phase
+  outside 1-5 now stops the cooldown with `Cooldown stopped: a value in
+  _COOLDOWN_VARS is not valid`.
+- Banner 2/5 is printed when hold and ramp are skipped (no chamber heater, or a
+  start target below the ramp target). The cooldown used to print 1/5, 3/5, 4/5
+  and 5/5 on those paths; it now says `Cooldown phase 2/5 RAMP: skipped, no hold
+  or ramp to run`.
+- Phase 4 counts `bed_fans`. A printer with only bed fans was told `No exhaust
+  or external_pc fan configured, skipping exhaust` and its bed fans were never
+  set; the message now reads `No exhaust, external_pc or bed_fans fan
+  configured, skipping exhaust` and appears only when none of the three exists.
+- `exhaust_enable` in a profile must be `True` or `False` (`1` and `0` and a
+  missing key work as before). Text such as `"False"` counted as true, so the
+  fans ran at full speed; text and `None` are now refused with `exhaust_enable
+  must be True or False`.
+- Profile values must be present and numeric. `chamber_hold_minutes`,
+  `passive_rest_minutes`, `chamber_target_temp`, `cooldown_ramp_step_c`,
+  `cooldown_ramp_step_seconds` and `exhaust_fan_speed` used to be coerced
+  silently: text or `None` read as 0 (a skipped phase, or fans set to 0), and a
+  missing key raised a template error. START_COOLDOWN now refuses them in one
+  `Invalid cooldown profile NAME: ... must be numbers` line. Text values such as
+  `"60"`, which were accepted before, are refused too. The shipped profiles use
+  numbers and are unaffected.
+- Fractional hold and rest minutes are honored. They were truncated, so a hold
+  of 0.5 minutes was no hold at all.
+- A chamber with only a sensor has no tracked target. Changing
+  `chamber_cooled_temp` during the cooldown no longer stops it with `changed by
+  hand`.
+- START_COOLDOWN refuses a `chamber_sensor` (when there is no chamber heater) or
+  a `bed_heater` that has no `temperature`, which only happens when
+  `_HARDWARE_VARS` names the wrong object. A tick that finds a reading that is
+  not a number stops the cooldown with `Cooldown stopped: the chamber or bed
+  temperature cannot be read`; the tick used to raise and strand the loop.
+- A profile name with a quote mark (`O'NEIL`) is refused by START_COOLDOWN with
+  `profile names cannot contain quote marks`, and COOLDOWN_SELECT refuses to
+  store one. START used to fail half way through, after it had raised the idle
+  timeout.
+- COOLDOWN_SELECT trims whitespace around the material. `MATERIAL=" ASA"`
+  silently selected the DEFAULT profile.
+- A profile with a negative `chamber_target_temp` is refused. It was read as "no
+  ramp".
+- A ramping profile with `cooldown_ramp_step_c` under 0.1 is refused. A step of
+  0.01 made a 44-hour ramp and raised the idle timeout to match.
 
 ### Changed
+- `START_COOLDOWN PROFILE=` accepts a profile name in any case (materials
+  already did), and `Unknown cooldown profile` now lists the known profiles. A
+  `"` in the typed name is shown as `'`; it used to make the message itself fail
+  with `Malformed command`.
+- A ramp step time that is not a multiple of 5 seconds is rounded to the nearest
+  5 (the loop ticks every 5 seconds), and START_COOLDOWN prints `Ramp step of 7 s
+  runs as 5 s because the loop ticks every 5 s`. It used to run at the next
+  lower multiple while the RAMP banner and the idle-timeout estimate used the
+  requested time. A step time under 5 seconds is still refused, and a profile
+  without a ramp is left alone.
+- The check for a new print reads `print_stats.state` (`printing`) instead of
+  `idle_timeout.state` with a five-tick guard. `idle_timeout` can read `Printing`
+  after a move, dwell or homing, so a `G4 P30000` or a `G28` during the chill
+  phase could stop the cooldown as if a print had started. The message is
+  unchanged, and a printer without `print_stats` has no check.
+- A profile fan speed above 0 but under a fan's `min_power` (or `off_below`) is
+  raised to that minimum for that fan, and START_COOLDOWN prints `exhaust_fan_speed
+  0.05 is below the fan minimum, so these fans run at their minimum instead:
+  exhaust_fan (0.2)`. Mainline Klipper treats a speed under `off_below` as off. The
+  shipped profiles use 0.0 and 1.0 and are unaffected.
+- COOLDOWN_STATUS warns when a phase is running but the loop has not ticked for
+  over a minute (`The cooldown loop last ran 270 s ago ...`), which is what
+  `UPDATE_DELAYED_GCODE ID=_COOLDOWN_LOOP DURATION=0` or a stalled loop looks
+  like. Each tick and START record `toolhead.estimated_print_time` in the new
+  `last_tick` variable for it.
+- A rest longer than 0 turns off the external_pc and bed fans as well as the
+  exhaust. Only the exhaust used to stop, so the chamber was not still while it
+  rested. Phase 4 still sets all three to the profile speed. The only shipped
+  profile with a rest is REST_5M_THEN_EX.
+- Completion also turns the bed heater off (when its target is above 0), so a
+  finished cooldown leaves no heater on. It already turned off the chamber heater
+  and every fan, including the part fan and fans you set by hand.
+- New `idle_timeout_tracking.cfg`, included by `cooldown.cfg`, wraps
+  `SET_IDLE_TIMEOUT` and remembers the timeout set by hand
+  (`_COOLDOWN_VARS user_idle_timeout`). START extends from that value, a shorter
+  value set during the hold and ramp is held back until the heater is released
+  (`Idle timeout kept at N s while the cooldown runs, then set to M s`), and phase
+  3, completion and reset put the remembered value back. Before, they wrote the
+  configured value, so `DISABLE_TIMEOUT` (999999) and a pause (43200) were
+  replaced by 4800. Remove the include line if another config renames
+  `SET_IDLE_TIMEOUT`.
+- Phase 3 REST turns the bed heater off when its target is above 0 and says so
+  (`Bed heater turned off (its target was 100°C), the bed now cools with the
+  chamber`). A bed target left on after the print used to keep CHILL from ever
+  completing. The bed stays on through HOLD and RAMP.
+- The `changed by hand` stop names what changed (`chamber target`, `bed target`,
+  `exhaust fan speed`, `bed fans speed`) and says the rest of the cooldown is
+  cancelled and the heaters and fans stay as set. The line starts as before.
+- COOLDOWN_SELECT says `Unknown material ASAA, using the DEFAULT profile
+  PASSIVE_ONLY` when the material is not in the table. A typo used to select
+  DEFAULT without a word. A blank `MATERIAL=` still selects DEFAULT silently.
+- COOLDOWN_SELECT refuses a material that maps to a profile missing from the
+  profile table (`Material ASA maps to profile NAME, which is not in the profile
+  table. Profile not changed.`). A bad local override used to be selected and
+  failed at START_COOLDOWN, after the print.
+- A profile name with a `;`, `#` or `*` is refused like one with a quote mark
+  (`profile names cannot contain quote marks, semicolons, hash signs or
+  asterisks`). Mainline Klipper cuts those characters out of a command line, and
+  a `;` cut the refusal message itself. Messages show them as `?`.
+- COOLDOWN_SELECT reports a material table that is not a table (a list, text or
+  nothing) and leaves the selection alone. It used to raise `Error evaluating`,
+  which aborted the macro that called it, and so the print start.
+- COOLDOWN_SELECT during a running cooldown prints `A cooldown is running, so the
+  material was not selected` and changes nothing. It used to overwrite the
+  profile name, so COOLDOWN_STATUS showed the wrong profile and a second
+  `START_COOLDOWN` started it.
+- START_COOLDOWN during a running cooldown prints `A cooldown is already running
+  (phase 1/5), so nothing was started` and changes nothing. A second START used
+  to print `Cooldown started` again, restart the hold from the beginning and
+  record the heaters and fans as they were mid-run. Run `COOLDOWN_RESET` first to
+  start another.
+- COOLDOWN_RESET prints `Cooldown reset` when it stops a running cooldown. The
+  idle timeout or a print macro could end a cooldown without any message.
+  Nothing is printed when no cooldown was running, and the cooldown's own stops
+  and completion pass `QUIET=1`, so they still print one line.
+- The phase 4 banner names each fan's speed when they differ
+  (`EXHAUST: exhaust_fan to 0.2, external_pc to 0.1`). With a fan minimum it
+  used to show the exhaust fan's speed for all of them.
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.
 - A phase the profile does not use still prints its numbered banner, marked
   skipped (`Cooldown phase 2/5 RAMP: skipped, profile has no ramp`), instead of
