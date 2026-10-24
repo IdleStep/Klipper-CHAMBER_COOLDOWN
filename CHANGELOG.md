@@ -136,6 +136,11 @@ Requires Hardware Controls 1.0.0 or later.
   material was not selected` and changes nothing. It used to overwrite the
   profile name, so COOLDOWN_STATUS showed the wrong profile and a second
   `START_COOLDOWN` started it.
+- START_COOLDOWN during a running cooldown prints `A cooldown is already running
+  (phase 1/5), so nothing was started` and changes nothing. A second START used
+  to print `Cooldown started` again, restart the hold from the beginning and
+  record the heaters and fans as they were mid-run. Run `COOLDOWN_RESET` first to
+  start another.
 - COOLDOWN_RESET prints `Cooldown reset` when it stops a running cooldown. The
   idle timeout or a print macro could end a cooldown without any message.
   Nothing is printed when no cooldown was running, and the cooldown's own stops

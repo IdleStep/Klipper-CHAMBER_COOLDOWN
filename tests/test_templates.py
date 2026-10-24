@@ -613,6 +613,34 @@ class Templates(unittest.TestCase):
         self.assertEqual(p.state[VARS].cooldown_profile, 'IMMEDIATE_EX')
         self.assertEqual(sum('A cooldown is running' in c for c in self.messages(p)), 1)
 
+    def test_start_during_a_run_is_refused_and_changes_nothing(self):
+        p = Printer()
+        p.run('START_COOLDOWN', PROFILE='HOLD_60M_COOL_EX')
+        for _ in range(30):
+            p.run('_COOLDOWN_LOOP')
+        loops = p.state[VARS].phase_loops
+        before = len(p.commands)
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        refused = [c for c in p.commands[before:] if 'already running' in c]
+        self.assertEqual(len(refused), 1)
+        self.assertIn('phase 1/5', refused[0])
+        self.assertEqual(sum('Cooldown started' in c for c in p.commands), 1)
+        self.assertEqual(p.state[VARS].phase, 1)
+        self.assertEqual(p.state[VARS].phase_loops, loops)  # the hold was not restarted
+        self.assertEqual(p.state[VARS].cooldown_profile, 'HOLD_60M_COOL_EX')
+        self.assertFalse(any(c.startswith(('CHAMBER', 'SET_IDLE_TIMEOUT')) for c in p.commands[before:]))
+        p.run('COOLDOWN_RESET')
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')  # after a reset it starts again
+        self.assertEqual(p.state[VARS].cooldown_profile, 'IMMEDIATE_EX')
+        self.assertEqual(p.state[VARS].phase, 1)
+
+    def test_start_refuses_when_the_phase_value_is_corrupt_too(self):
+        p = Printer()
+        p.state[VARS].phase = 9  # the loop would stop on this; START must not start over it
+        p.run('START_COOLDOWN', PROFILE='IMMEDIATE_EX')
+        self.assertEqual(sum('already running (phase 9/5)' in c for c in p.commands), 1)
+        self.assertEqual(sum('Cooldown started' in c for c in p.commands), 0)
+
     def test_cooldown_select_accepts_a_profile_in_any_case(self):
         p = Printer()
         p.state['gcode_macro _COOLDOWN_MATERIALS'].filament_table['XX'] = 'hold_60m_cool_ex'
