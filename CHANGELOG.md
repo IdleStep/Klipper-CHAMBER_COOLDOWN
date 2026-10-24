@@ -145,6 +145,9 @@ Requires Hardware Controls 1.0.0 or later.
   idle timeout or a print macro could end a cooldown without any message.
   Nothing is printed when no cooldown was running, and the cooldown's own stops
   and completion pass `QUIET=1`, so they still print one line.
+- The phase 4 banner names each fan's speed when they differ
+  (`EXHAUST: exhaust_fan to 0.2, external_pc to 0.1`). With a fan minimum it
+  used to show the exhaust fan's speed for all of them.
 - Clearer messages; COOLDOWN_STATUS shows the phase name and time in phase.
 - A phase the profile does not use still prints its numbered banner, marked
   skipped (`Cooldown phase 2/5 RAMP: skipped, profile has no ramp`), instead of

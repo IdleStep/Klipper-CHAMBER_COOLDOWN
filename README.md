@@ -145,7 +145,7 @@ Add guarded calls to existing macros rather than replacing them, and never write
 | `A cooldown is running, so the material was not selected. Run COOLDOWN_RESET first to change it.` | COOLDOWN_SELECT was called while a cooldown was running and changed nothing. |
 | `A cooldown is already running (phase 1/5), so nothing was started. Run COOLDOWN_RESET first to start another.` | START_COOLDOWN was called while a cooldown was running and changed nothing. The running one keeps its profile, its phase and its timers. |
 | `The cooldown loop last ran 270 s ago. If the printer was not busy, it has stopped. Run COOLDOWN_RESET to clear it.` | COOLDOWN_STATUS found a phase running but no loop tick for over a minute, as after `UPDATE_DELAYED_GCODE ID=_COOLDOWN_LOOP DURATION=0`. A long homing or probing can cause it too. |
-| `Cooldown phase N/5 NAME: ...` | A phase started. `skipped` means the profile does not use it. |
+| `Cooldown phase N/5 NAME: ...` | A phase started. `skipped` means the profile does not use it. Phase 4 says `fans to 1.0` when every fan gets the same speed, and `exhaust_fan to 0.2, external_pc to 0.1` when a fan minimum raises some of them. |
 | `Cooldown HOLD: 2.0 of 60.0 min`, `Cooldown RAMP: ...`, `Cooldown REST: ...`, `Cooldown CHILL: ...` | Phase progress, every 2 minutes. |
 | `Hold complete`, `Ramp target reached`, `Rest complete` | A phase finished. |
 | `No chamber heater, skipping hold and ramp`, `Chamber target ... is below the ramp target ..., skipping hold and ramp` | The cooldown goes from phase 1 straight to phase 3. Banner 2/5 still prints, as `RAMP: skipped, no hold or ramp to run`. |

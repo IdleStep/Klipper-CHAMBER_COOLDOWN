@@ -493,6 +493,20 @@ class Templates(unittest.TestCase):
         self.assertNotIn('bed_fans', warnings[0])
         self.assertEqual(p.state[VARS].phase, 5)  # the raised speeds are not seen as a hand change
 
+    def test_exhaust_banner_names_each_fan_when_the_speeds_differ(self):
+        p = self.fan_minimum_printer(0.05, exhaust_fan={'min_power': 0.2}, external_pc={'min_power': None, 'off_below': 0.1})
+        banners = [c for c in self.messages(p) if 'phase 4/5' in c]
+        self.assertEqual(len(banners), 1)
+        self.assertIn('EXHAUST: exhaust_fan to 0.2, external_pc to 0.1, bed_fans to 0.05', banners[0])
+
+    def test_exhaust_banner_keeps_one_speed_when_the_fans_agree(self):
+        for speed, minimums in [(0.5, {}), (0.5, {'exhaust_fan': {'min_power': 0.2}}), (0.0, {})]:
+            with self.subTest(speed=speed):
+                p = self.fan_minimum_printer(speed, **minimums)
+                banners = [c for c in self.messages(p) if 'phase 4/5' in c]
+                self.assertEqual(len(banners), 1)
+                self.assertIn('EXHAUST: fans to %s"' % speed, banners[0])
+
     def test_speed_at_or_above_the_minimum_or_zero_is_left_alone(self):
         for speed, enable in [(0.2, True), (0.5, True), (1.0, True), (0.0, True), (0.05, False)]:
             with self.subTest(speed=speed, enable=enable):
